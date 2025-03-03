@@ -1,0 +1,134 @@
+/*
+    This is a configuration file for the SwitchStartupProject Visual Studio Extension
+    See https://heptapod.host/thirteen/switchstartupproject/blob/branch/current/Configuration.md
+*/
+{
+    /*  Configuration File Version  */
+    "Version": 3,
+    
+    /*  Create an item in the dropdown list for each project in the solution?  */
+    "ListAllProjects": true,
+
+    /*
+        Dictionary of named configurations with one or multiple startup projects
+        and optional parameters like command line arguments and working directory.
+        Example:
+
+        "MultiProjectConfigurations": {
+          "A + B (Ext)": {
+            "Projects": {
+              "MyProjectA": {},
+              "MyProjectB": {
+                "CommandLineArguments": "1234",
+                "WorkingDirectory": "%USERPROFILE%\\test",
+                "StartExternalProgram": "c:\\myprogram.exe"
+              }
+            }
+          },
+          "A + B": {
+            "Projects": {
+              "MyProjectA": {},
+              "MyProjectB": {
+                "CommandLineArguments": "",
+                "WorkingDirectory": "",
+                "StartProject": true
+              }
+            }
+          },
+          "D (Debug x86)": {
+            "Projects": {
+              "MyProjectD": {}
+            },
+            "SolutionConfiguration": "Debug",
+            "SolutionPlatform": "x86",
+          },
+          "D (Release x64)": {
+            "Projects": {
+              "MyProjectD": {}
+            },
+            "SolutionConfiguration": "Release",
+            "SolutionPlatform": "x64",
+          }
+        }
+    */
+  "MultiProjectConfigurations": {
+    "OSI Test": {
+      "Projects": {
+        "OSI.Core": {
+          "ProfileName": "OSI.Core Test"
+        },
+        "OSI.PaymentService": {
+          "ProfileName": "OSI.PaymentService Test"
+        },
+        "OSI.CefSharp": {
+          "ProfileName": "OSI.CefSharp"
+        }
+      }
+    },
+    "OSI Alpha": {
+      "Projects": {
+        "OSI.Core": {
+          "ProfileName": "OSI.Core Alpha"
+        },
+        "OSI.PaymentService": {
+          "ProfileName": "OSI.PaymentService Alpha"
+        },
+        "OSI.CefSharp": {
+          "ProfileName": "OSI.CefSharp"
+        }
+      }
+    },
+    "OSI Prod": {
+      "Projects": {
+        "OSI.Core": {
+          "ProfileName": "OSI.Core Prod"
+        },
+        "OSI.PaymentService": {
+          "ProfileName": "OSI.PaymentService Prod"
+        },
+        "OSI.CefSharp": {
+          "ProfileName": "OSI.CefSharp"
+        }
+      }
+    },
+    "OSI IIS Express Test": {
+      "Projects": {
+        "OSI.Core": {
+          "ProfileName": "IIS Express Test"
+        },
+        "OSI.PaymentService": {
+          "ProfileName": "IIS Express Test"
+        },
+        "OSI.CefSharp": {
+          "ProfileName": "IIS Express"
+        }
+      }
+    },
+    "OSI IIS Express Alpha": {
+      "Projects": {
+        "OSI.Core": {
+          "ProfileName": "IIS Express Alpha"
+        },
+        "OSI.PaymentService": {
+          "ProfileName": "IIS Express Alpha"
+        },
+        "OSI.CefSharp": {
+          "ProfileName": "IIS Express"
+        }
+      }
+    },
+    "OSI IIS Express Prod": {
+      "Projects": {
+        "OSI.Core": {
+          "ProfileName": "IIS Express Prod"
+        },
+        "OSI.PaymentService": {
+          "ProfileName": "IIS Express Prod"
+        },
+        "OSI.CefSharp": {
+          "ProfileName": "IIS Express"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,141 @@
+﻿@using Models.Db
+@using Models.Requests
+@using Models.Enums
+@using Radzen
+@inject Radzen.DialogService dialogService
+@inject IRegistrationSvc registrationSvc
+@inject NotificationService NotificationService
+
+<style>
+    form .row {
+        margin-bottom: 16px;
+    }
+</style>
+
+@if (registration == null || isProcess)
+{
+    <p><em>Обработка...</em></p>
+}
+else
+{
+    <RadzenTemplateForm Data="registration" Submit="@(async (Registration arg) => await Submit())">
+        <RadzenCard Style="padding: 20px;">
+            <DataAnnotationsValidator />
+            <DbExceptionValidator @ref="validator" />
+            <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+            <div class="row">
+                <div class="col-md-6">
+                    <RadzenLabel Text="Наименование ОСИ" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@registration.Name" />
+                    <ValidationMessage For="@(() => @registration.Name)" />
+                </div>
+                <div class="col-md-6">
+                    <RadzenLabel Text="Телефон" />
+                    <RadzenMask Mask="**********" Pattern="[^\\d]" Placeholder="0000000000" @bind-Value=@registration.Phone style="width: 100%" />
+                    <ValidationMessage For="@(() => @registration.Phone)" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-3">
+                    <RadzenLabel Text="ИИН" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@registration.Idn" MaxLength="12" />
+                    <ValidationMessage For="@(() => @registration.Idn)" />
+                </div>
+                <div class="col-md-9">
+                    <RadzenLabel Text="Адрес" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@registration.Address" />
+                    <ValidationMessage For="@(() => @registration.Address)" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-3">
+                    <RadzenLabel Text="Состояние" />
+                    <RadzenDropDown TValue="RegistrationState" Data=@states TextProperty="Name" @bind-Value="@registration.State"/>
+                    <ValidationMessage For="@(() => @registration.StateCode)" />
+                </div>
+                <div class="col-md-5">
+                    <RadzenLabel Text="Дата подписания" />
+                    <RadzenDatePicker @bind-Value="@registration.SignDt" />
+                    <ValidationMessage For="@(() => @registration.SignDt)" />
+                </div>
+            </div>
+            @if (registration.StateCode is RegistrationStateCodes.REJECTED)
+            {
+                <div class="row">
+                    <div class="col-md-12">
+                        <RadzenLabel Text="Причина отказа" />
+                        <RadzenTextBox style="width: 100%" @bind-Value="@registration.RejectReason" />
+                        <ValidationMessage For="@(() => @registration.RejectReason)" />
+                    </div>
+                </div>
+            }
+
+            <div class="row justify-content-end">
+                <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                    <Button Color="Color.Primary" Type="Blazorise.ButtonType.Submit" class="mr-1">Сохранить</Button>
+                    <Button Color="Color.Secondary" Clicked="@Cancel">Отмена</Button>
+                </div>
+            </div>
+            @*<div class="row justify-content-end">
+                    <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                        <RadzenButton ButtonType="Radzen.ButtonType.Submit" Icon="save" Text="Сохранить" />
+                        <RadzenButton ButtonStyle="ButtonStyle.Light" Icon="cancel" style="display: inline-block; margin-left: 10px;" Text="Отмена" Click="@Cancel" />
+                    </div>
+                </div>*@
+        </RadzenCard>
+    </RadzenTemplateForm>
+}
+
+@code {
+    [Parameter]
+    public int RegistrationId { get; set; }
+
+    public IEnumerable<RegistrationState> states;
+
+    private bool isProcess = false;
+    private bool IsProcess
+    {
+        set
+        {
+            isProcess = value;
+            StateHasChanged();
+        }
+    }
+    private Registration registration;
+    private DbExceptionValidator validator;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (RegistrationId != default)
+        {
+            registration = await registrationSvc.GetRegistrationById(RegistrationId);
+            states = await registrationSvc.GetRegistrationStates();
+        }
+        else throw new Exception("Не передан параметр RegistrationId");
+        //{
+        //    registration = new Registration();
+        //}
+    }
+
+    async Task Submit()
+    {
+        try
+        {
+            IsProcess = true;
+            await registrationSvc.AddOrUpdateModel(registration);
+            IsProcess = false;
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Detail = "Заявка сохранена", Duration = 3000 });
+            dialogService.Close(registration);
+        }
+        catch (Exception ex)
+        {
+            IsProcess = false;
+            validator.DisplayErrors(ex);
+        }
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+}

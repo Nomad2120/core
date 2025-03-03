@@ -1,0 +1,213 @@
+﻿@page "/osi-account-applications"
+
+@using Models.Db
+@using Models.Enums
+@using Radzen
+@inject IOsiAccountApplicationSvc osiAccountApplicationSvc
+@inject Radzen.DialogService dialogService
+@inject NotificationService NotificationService
+
+@attribute [Authorize]
+
+<PageTitle Value="Заявки на добавление/изменение счетов" />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>Заявки на добавление/изменение счетов</h3>
+        <DxDataGrid @ref="grid"
+                    Data="@applications"
+                    SelectionMode="DevExpress.Blazor.DataGridSelectionMode.None"
+                    ShowFilterRow="true"
+                    HtmlDataCellDecoration="@OnHtmlDataCellDecoration"
+                    PageSize="100"
+                    CssClass="mw-1100">
+            <Columns>
+                <DxDataGridColumn Field="@nameof(OsiAccountApplication.Id)"
+                                  Caption="Id"
+                                  Width="60px">
+                </DxDataGridColumn>
+                <DxDataGridDateEditColumn Field="@nameof(OsiAccountApplication.CreateDt)"
+                                          DisplayFormat="dd.MM.yyyy HH:mm:ss"
+                                          Caption="Создана"
+                                          SortOrder="DataGridColumnSortOrder.Descending"
+                                          SortIndex="0"
+                                          Width="100px">
+                </DxDataGridDateEditColumn>
+                <DxDataGridColumn Field="@nameof(OsiAccountApplication.OsiName)"
+                                  Caption="Наименование ОСИ"
+                                  Width="150px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiAccountApplication.ApplicationTypeText)"
+                                  Caption="Тип заявки"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiAccountApplication.AccountTypeNameRu)"
+                                  Caption="Тип счета"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiAccountApplication.OldBankBic)"
+                                  Caption="Старый БИК"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiAccountApplication.OldAccount)"
+                                  Caption="Старый IBAN"
+                                  Width="250px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiAccountApplication.BankBic)"
+                                  Caption="БИК"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiAccountApplication.Account)"
+                                  Caption="IBAN"
+                                  Width="250px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiAccountApplication.StateText)"
+                                  Caption="Статус"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Caption="Документы"
+                                  Width="100px"
+                                  AllowFilter="false"
+                                  AllowSort="false"
+                                  AllowGroup="false">
+                    <DisplayTemplate>
+                        <a href=@("/osi-account-application-docs/" + (context as OsiAccountApplication).Id) target="_blank">Документы</a>
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+                <DxDataGridColumn Caption="Действия"
+                                  Width="100px"
+                                  AllowFilter="false"
+                                  AllowSort="false"
+                                  AllowGroup="false">
+                    <DisplayTemplate>
+                        @{
+                            var data = context as OsiAccountApplication;
+                            @*временно, т.к. есть изменение состояния в дата-форме*@
+                            if (data.State == "PENDING")
+                            {
+                                <a href="" @onclick="@(async (e) => await Approve(context as OsiAccountApplication))" @onclick:preventDefault>Подтвердить</a>
+                                <a href="" @onclick="@(async (e) => await Reject(context as OsiAccountApplication))" @onclick:preventDefault>Отклонить</a>
+                            }
+                        }
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+            </Columns>
+        </DxDataGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    private IList<OsiAccountApplication> applications;
+    private DxDataGrid<OsiAccountApplication> grid;
+    private bool IsLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    async Task Approve(OsiAccountApplication application)
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        try
+        {
+            await osiAccountApplicationSvc.Approve(application.Id);
+            var model = await osiAccountApplicationSvc.GetOsiAccountApplicationById(application.Id);
+            if (model != null)
+            {
+                var index = applications.IndexOf(application);
+                applications[index] = model;
+            }
+            _ = grid.Refresh();
+            StateHasChanged();
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Detail = $"Заявка одобрена", Duration = 3000 });
+        }
+        catch (Exception ex)
+        {
+            ShowDebug(ex.Message, "Ошибка");
+        }
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    async Task Reject(OsiAccountApplication application)
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        try
+        {
+            string rejectReason = Convert.ToString(await dialogService.OpenAsync<Prompt>("Введите причину отказа",
+                new() { ["Label"] = "Причина отказа" },
+                new DialogOptions() { Width = "950px", Height = "auto" }));
+            if (string.IsNullOrWhiteSpace(rejectReason))
+            {
+                IsLoading = false;
+                return;
+            }
+            await osiAccountApplicationSvc.Reject(application.Id, rejectReason);
+            var model = await osiAccountApplicationSvc.GetOsiAccountApplicationById(application.Id);
+            if (model != null)
+            {
+                var index = applications.IndexOf(application);
+                applications[index] = model;
+            }
+            _ = grid.Refresh();
+            StateHasChanged();
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Detail = $"Заявка отклонена", Duration = 3000 });
+        }
+        catch (Exception ex)
+        {
+            ShowDebug(ex.Message, "Ошибка");
+        }
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        applications = (await osiAccountApplicationSvc.GetOsiAccountApplications())/*.OrderByDescending(u => u.CreateDt)*/.ToList();
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    void ShowDebug(string message, string title = null, int width = 0, int height = 0)
+    {
+        dialogService.Open<Debug>(title == null ? "Сообщение" : title, new Dictionary<string, object>
+            {
+                ["data"] = message
+            }, new DialogOptions() { Width = width == 0 ? "950px" : width.ToString() + "px", Height = height == 0 ? "auto" : height.ToString() + "px" });
+    }
+
+    void OnHtmlDataCellDecoration(DataGridHtmlDataCellDecorationEventArgs<OsiAccountApplication> e)
+    {
+        if (e.FieldName == nameof(OsiAccountApplication.StateText))
+        {
+            switch (e.DataItem.State)
+            {
+                case "CREATED":
+                    e.Style += " color: rgb(115, 158, 170);";
+                    break;
+                case "PENDING":
+                    e.Style += " color: rgb(115, 158, 2);";
+                    break;
+                case "APPROVED":
+                    e.Style += " color: rgb(15, 2, 170);";
+                    break;
+                case "REJECTED":
+                    e.Style += " color: rgb(200, 158, 170);";
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+}

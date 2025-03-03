@@ -1,0 +1,93 @@
+﻿@using Models.Db
+@using Radzen
+@inject Radzen.DialogService dialogService
+@inject IModelService<OSIBillingDbContext, Role> roleService
+
+<style>
+    form .row {
+        margin-bottom: 16px;
+    }
+</style>
+
+@if (role == null || isProcess)
+{
+    <p><em>Обработка...</em></p>
+}
+else
+{
+    <RadzenTemplateForm Data="role" Submit="@(async (Role arg) => await Submit())">
+        <RadzenCard Style="padding: 20px;">
+            <DataAnnotationsValidator />
+            <DbExceptionValidator @ref="validator" />
+            <Microsoft.AspNetCore.Components.Forms.ValidationSummary Model="@role" />
+            <div class="row">
+                <div class="col-md-4">
+                    <RadzenLabel Text="Код роли" />
+                    <RadzenTextBox style="width: 100%; text-transform: uppercase;" @bind-Value="@role.Code" />
+                    <ValidationMessage For="@(() => @role.Code)" />
+                </div>
+                <div class="col-md-8">
+                    <RadzenLabel Text="Наименование" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@role.Name" />
+                    <ValidationMessage For="@(() => @role.Name)" />
+                </div>
+            </div>
+            <div class="row justify-content-end">
+                <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                    <RadzenButton ButtonType="Radzen.ButtonType.Submit" Icon="save" Text="Сохранить" />
+                    <RadzenButton ButtonStyle="ButtonStyle.Light" Icon="cancel" style="display: inline-block; margin-left: 10px;" Text="Отмена" Click="@Cancel" />
+                </div>
+            </div>
+        </RadzenCard>
+    </RadzenTemplateForm>
+}
+
+@code {
+    [Parameter]
+    public int RoleId { get; set; }
+
+    private bool isProcess = false;
+    private bool IsProcess
+    {
+        set
+        {
+            isProcess = value;
+            StateHasChanged();
+        }
+    }
+    private Role role;
+    private DbExceptionValidator validator;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (RoleId != default)
+        {
+            role = await roleService.GetModelById(RoleId);
+        }
+        else
+        {
+            role = new Role();
+        }
+    }
+
+    async Task Submit()
+    {
+        try
+        {
+            IsProcess = true;
+            await roleService.AddOrUpdateModel(role);
+            IsProcess = false;
+            dialogService.Close(role);
+        }
+        catch (Exception ex)
+        {
+            IsProcess = false;
+            validator.DisplayErrors(ex);
+        }
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+}

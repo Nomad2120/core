@@ -1,0 +1,179 @@
+﻿@using Models.Db
+@using Models.Requests
+@using Models.Enums
+@using Radzen
+@inject Radzen.DialogService dialogService
+@inject IOsiSvc osiSvc
+@inject NotificationService NotificationService
+
+<style>
+    form .row {
+        margin-bottom: 16px;
+    }
+</style>
+
+@if (osi == null || isProcess)
+{
+    <p><em>Обработка...</em></p>
+}
+else
+{
+    <RadzenTemplateForm Data="osi" Submit="@(async (Osi arg) => await Submit())">
+        <DataAnnotationsValidator />
+        <RadzenCard Style="padding: 20px;">
+            <div class="row">
+                <div class="col-md-6">
+                    <RadzenLabel Text="Наименование" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@osi.Name" />
+                </div>
+                <div class="col-md-6">
+                    <RadzenLabel Text="Адрес" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@osi.Address" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <RadzenLabel Text="Email" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@osi.Email" />
+                </div>
+                <div class="col-md-6">
+                    <RadzenLabel Text="Телефон" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@osi.Phone" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <RadzenLabel Text="БИН/ИИН" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@osi.Idn" MaxLength="12" />
+                </div>
+                <div class="col-md-6">
+                    <RadzenLabel Text="РКА" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@osi.Rca" MaxLength="16" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <RadzenLabel Text="КБе" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@osi.Kbe" MaxLength="2" />
+                </div>
+                <div class="col-md-6">
+                    <RadzenLabel Text="Кол-во квартир:" />
+                    <RadzenNumeric style="width: 100%" ShowUpDown="false" TValue="int?" @bind-Value=@osi.ApartCount />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <RadzenCheckBox @bind-Value="@osi.IsLaunched" TValue="bool" />
+                    <RadzenLabel Text="Рабочий ОСИ" Style="margin-left: 5px; margin-top: 15px;" />
+                </div>
+                <div class="col-md-6">
+                    <RadzenCheckBox @bind-Value="@osi.TakeComission" TValue="bool" />
+                    <RadzenLabel Text="Комиссия БВУ за счет eOsi" Style="margin-left: 5px; margin-top: 15px;" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <RadzenCheckBox @bind-Value="@osi.AccuralsWithDecimals" TValue="bool" />
+                    <RadzenLabel Text="Начисления с тиын" Style="margin-left: 5px; margin-top: 15px;" />
+                </div>
+                <div class="col-md-6">
+                    <RadzenCheckBox @bind-Value="@osi.CreateFine" TValue="bool" />
+                    <RadzenLabel Text="Начислять пеню" Style="margin-left: 5px; margin-top: 15px;" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <RadzenButton ButtonStyle="ButtonStyle.Primary" Click="@AddToPromo" class="mr-1 mt-2"  Disabled="@osi.IsInPromo">Добавить акцию</RadzenButton>
+                </div>
+                <div class="col-md-6">
+                    <RadzenCheckBox @bind-Value="@osi.CanRemakeAccurals" TValue="bool" />
+                    <RadzenLabel Text="Возможность доначисления" Style="margin-left: 5px; margin-top: 15px;" />
+                </div>
+            </div>
+            <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+            <div class="row justify-content-end">
+                <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                    <Button Color="Color.Primary" Type="Blazorise.ButtonType.Submit" class="mr-1">Сохранить</Button>
+                    <Button Color="Color.Secondary" Clicked="@Cancel">Отмена</Button>
+                </div>
+            </div>
+        </RadzenCard>
+    </RadzenTemplateForm>
+}
+
+@code {
+    [Parameter]
+    public int OsiId { get; set; }
+
+    private bool isProcess = false;
+    private bool IsProcess
+    {
+        set
+        {
+            isProcess = value;
+            StateHasChanged();
+        }
+    }
+    private Osi osi;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (OsiId != default)
+        {
+            osi = await osiSvc.GetOsiById(OsiId);
+        }
+        else throw new Exception("Не передан параметр OsiId");
+    }
+
+    async Task Submit()
+    {
+        try
+        {
+            IsProcess = true;
+            await osiSvc.AddOrUpdateModel(osi);
+            IsProcess = false;
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Detail = "Изменения сохранены", Duration = 3000 });
+            osi = await osiSvc.GetOsiById(osi.Id);
+            dialogService.Close(osi);
+        }
+        catch (Exception ex)
+        {
+            IsProcess = false;
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Detail = ex.Message, Duration = 8000 });
+        }
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+
+    async Task AddToPromo()
+    {
+        if (true == await dialogService.Confirm("Хотите добавить ОСИ в акцию?", "Подтвердите действие",
+                    new ConfirmOptions
+                        {
+                            CancelButtonText = "Нет",
+                            OkButtonText = "Да",
+                            AutoFocusFirstElement = false,
+                            Width = "auto",
+                            Height = "auto",
+                        }))
+        {
+            try
+            {
+                IsProcess = true;
+                await osiSvc.AddInPromo(osi.Id);
+                IsProcess = false;
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Detail = "ОСИ добавлен в акцию", Duration = 3000 });
+                osi = await osiSvc.GetOsiById(osi.Id);
+                dialogService.Close(osi);
+            }
+            catch (Exception ex)
+            {
+                IsProcess = false;
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Detail = ex.Message, Duration = 8000 });
+            }
+        }
+    }
+}

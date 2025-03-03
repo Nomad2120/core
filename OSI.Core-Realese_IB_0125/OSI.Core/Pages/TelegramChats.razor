@@ -1,0 +1,74 @@
+﻿@page "/telegram-chats"
+
+@using Models.Db
+@using Radzen
+@inject IModelService<OSIBillingDbContext, TelegramChat> telegramChatService
+@inject Radzen.DialogService dialogService
+@attribute [Authorize]
+
+<PageTitle Value="Контакты телеграм-бота" />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>Контакты телеграм-бота</h3>
+        <RadzenGrid @ref="grid" AllowPaging="true" PageSize="20" AllowFiltering="true" AllowSorting="true" Data="@telegramChats" TItem="TelegramChat">
+            <Columns>
+                <RadzenGridColumn Title="Chat Id" TItem="TelegramChat" Property="ChatId" Width="100px" />
+                <RadzenGridColumn Title="Телефон" TItem="TelegramChat" Property="Phone" Width="100px" />
+                <RadzenGridColumn Title="ФИО" TItem="TelegramChat" Property="FIO" Width="200px" />
+                <RadzenGridColumn Title="Действия" TItem="TelegramChat" Bubble="false" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="100px">
+                    <Template Context="data">
+                        <Button Color="Color.Danger" Clicked="@(e => ConfirmToDelete(data.Id))">Удалить контакт</Button>
+                    </Template>
+                </RadzenGridColumn>
+            </Columns>
+        </RadzenGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    private IList<TelegramChat> telegramChats;
+    private RadzenGrid<TelegramChat> grid;
+    private bool IsLoading = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task ConfirmToDelete(int id)
+    {
+        bool? confirm = await dialogService.Confirm("Удалить контакт?", "Внимание", new ConfirmOptions() { OkButtonText = "Да", CancelButtonText = "Нет" });
+        if (confirm ?? false)
+        {
+            var chat = telegramChats.FirstOrDefault(u => u.Id == id);
+            if (chat != null)
+            {
+                await telegramChatService.RemoveModel(chat);
+                telegramChats.Remove(chat);
+            }
+            await grid.Reload();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        telegramChats = (await telegramChatService.GetModels()).OrderBy(u => u.Phone).ToList();
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+}

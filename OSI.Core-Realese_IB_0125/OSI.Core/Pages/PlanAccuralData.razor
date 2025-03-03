@@ -1,0 +1,91 @@
+﻿@using Models.Db
+@using Models.Requests
+@using Models.Enums
+@using Radzen
+@inject Radzen.DialogService dialogService
+@inject IPlanAccuralSvc planSvc
+@inject NotificationService NotificationService
+
+<style>
+    form .row {
+        margin-bottom: 16px;
+    }
+</style>
+
+@if (planAccural == null || isProcess)
+{
+    <p><em>Обработка...</em></p>
+}
+else
+{
+    <RadzenTemplateForm Data="planAccural" Submit="@(async (PlanAccural arg) => await Submit())">
+        <RadzenCard Style="padding: 20px;">
+            <div class="row">
+                <div class="col-md-12">
+                    <RadzenCheckBox @bind-Value="@planAccural.AccuralCompleted" TValue="bool" />
+                    <RadzenLabel Text="Начисления уже произодились" Style="margin-left: 5px;" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12">
+                    <RadzenCheckBox @bind-Value="@planAccural.UssikingIncluded" TValue="bool" />
+                    <RadzenLabel Text="Наша оплата включена в тариф за 1 кв.м." Style="margin-left: 5px;" />
+                </div>
+            </div>
+
+            <div class="row justify-content-end">
+                <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                    <Button Color="Color.Primary" Type="Blazorise.ButtonType.Submit" class="mr-1">Сохранить</Button>
+                    <Button Color="Color.Secondary" Clicked="@Cancel">Отмена</Button>
+                </div>
+            </div>
+        </RadzenCard>
+    </RadzenTemplateForm>
+}
+
+@code {
+    [Parameter]
+    public int PlanAccuralId { get; set; }
+
+    private bool isProcess = false;
+    private bool IsProcess
+    {
+        set
+        {
+            isProcess = value;
+            StateHasChanged();
+        }
+    }
+    private PlanAccural planAccural;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (PlanAccuralId != default)
+        {
+            planAccural = await planSvc.GetPlanAccuralById(PlanAccuralId);
+        }
+        else throw new Exception("Не передан параметр PlanAccuralId");
+    }
+
+    async Task Submit()
+    {
+        try
+        {
+            IsProcess = true;
+            await planSvc.AddOrUpdateModel(planAccural);
+            IsProcess = false;
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Detail = "Изменения сохранены", Duration = 3000 });
+            dialogService.Close(planAccural);
+        }
+        catch (Exception ex)
+        {
+            IsProcess = false;
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Detail = ex.Message, Duration = 8000 });
+        }
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+}

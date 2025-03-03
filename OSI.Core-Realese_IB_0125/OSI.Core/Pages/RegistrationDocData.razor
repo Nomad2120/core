@@ -1,0 +1,128 @@
+﻿@using Models.Db 
+@using System.IO
+@using Radzen
+@inject Radzen.DialogService dialogService
+@inject IModelService<OSIBillingDbContext, Scan> scanService
+
+<style>
+    form .row {
+        margin-bottom: 16px;
+    }
+</style>
+
+@if (scan == null || isProcess)
+{
+    <p><em>Обработка...</em></p>
+}
+else
+{
+    <RadzenTemplateForm Data="scan" Submit="@(async (Scan arg) => await Submit())">
+        <RadzenCard Style="padding: 20px;">
+            <DataAnnotationsValidator />
+            <DbExceptionValidator @ref="validator" />
+            <Microsoft.AspNetCore.Components.Forms.ValidationSummary Model="@scan" />
+            <BlazorInputFile.InputFile id="uploadFiles" OnChange="HandleSelection" />
+            <div class="row">
+                @if (file != null)
+                {
+                    <div class="col-md-6">
+                        <div>
+                            <h4>@file.Name</h4>
+                            Размер: <strong>@file.Size байт</strong><br />
+                            Тип: <strong>@file.Type</strong><br />
+                        </div>
+                        @if (!isFileLoading)
+                        {
+                            <p>Загружен.</p>
+                        }
+                        else
+                        {
+                            <p>Загружается @((100.0 * file.Data.Position / file.Size).ToString("0"))%</p>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        @if (!isFileLoading)
+                        {
+                            <RadzenImage Path=@scan.FileName Style="max-width:200px; max-height:200px" />
+                            @*<RadzenImage Path=@($"data:image/jpg;base64,{Convert.ToBase64String(scan.Photo)}") Style="max-width:200px; max-height:200px" />*@
+                        }
+                    </div>
+                }
+                <ValidationMessage For="@(() => @scan.FileName)" />
+            </div>
+            <div class="row justify-content-end">
+                <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                    <RadzenButton ButtonType="Radzen.ButtonType.Submit" Icon="save" Text="Сохранить" />
+                    <RadzenButton ButtonStyle="ButtonStyle.Light" Icon="cancel" style="display: inline-block; margin-left: 10px;" Text="Отмена" Click="@Cancel" />
+                </div>
+            </div>
+        </RadzenCard>
+    </RadzenTemplateForm>
+}
+
+@code {
+    [Parameter]
+    public int ScanId { get; set; }
+
+    private bool isProcess = false;
+    private bool IsProcess
+    {
+        set
+        {
+            isProcess = value;
+            StateHasChanged();
+        }
+    }
+    private Scan scan;
+    private DbExceptionValidator validator;
+    IFileListEntry file;
+    bool isFileLoading;
+
+    async Task HandleSelection(IFileListEntry[] files)
+    {
+        file = files.FirstOrDefault();
+        if (file != null)
+        {
+            isFileLoading = true;
+            file.OnDataRead += (sender, eventArgs) => InvokeAsync(StateHasChanged);
+            var ms = new MemoryStream();
+            await file.Data.CopyToAsync(ms);
+            //File.WriteAllBytes(ms.ToArray())
+            //scan.Photo = ms.ToArray();
+            isFileLoading = false;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ScanId != default)
+        {
+            scan = await scanService.GetModelById(ScanId);
+        }
+        else
+        {
+            scan = new Scan();
+        }
+    }
+
+    async Task Submit()
+    {
+        try
+        {
+            IsProcess = true;
+            await scanService.AddOrUpdateModel(scan);
+            IsProcess = false;
+            dialogService.Close(scan);
+        }
+        catch (Exception ex)
+        {
+            IsProcess = false;
+            validator.DisplayErrors(ex);
+        }
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+}

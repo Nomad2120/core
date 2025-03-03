@@ -1,0 +1,196 @@
+﻿@page "/payment-orders-svod/{OsiId:int}"
+
+@using Models.Db
+@using Models.Reports
+@using Radzen
+@using System.IO
+
+@inject IOsiSvc osiSvc
+@inject IPaymentOrderSvc paymentOrderSvc
+@inject IReportsSvc reportsSvc
+@inject Radzen.DialogService dialogService
+@inject IBlazorDownloadFileService BlazorDownloadFileService
+@attribute [Authorize]
+
+<PageTitle Value=@("Свод плат.поручений: " + osiName) />
+<div class="row mb-3">
+    <div class="col-md-2">
+        <RadzenLabel Text="Начало периода" />
+        <RadzenDatePicker style="width: 100%" DateFormat="d" @bind-Value="@date1" />
+    </div>
+    <div class="col-md-2">
+        <RadzenLabel Text="Конец периода" />
+        <RadzenDatePicker style="width: 100%" DateFormat="d" @bind-Value="@date2" />
+    </div>
+</div>
+<div class="row mb-2">
+    <div class="col-md-2">
+        <RadzenButton ButtonStyle="ButtonStyle.Primary" Text="Поиск" Click="(async () => await LoadData())" />
+    </div>
+</div>
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>@("Свод плат.поручений: " + osiInfo)</h3>
+        <Button Class="mb-2" Color="Color.Success" Clicked="@(e => DownloadExcel(OsiId))">Скачать Excel</Button>
+        <DxDataGrid @ref="grid"
+                    Data="@paymentOrders"
+                    SelectionMode="DevExpress.Blazor.DataGridSelectionMode.None"
+                    ShowFilterRow="true"
+                    PageSize="300"
+                    CssClass="mw-1100">
+            <Columns>
+                <DxDataGridColumn Field="@nameof(SvodPaymentOrder.BankName)"
+                                  Caption="Источник"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(SvodPaymentOrder.IBAN)"
+                                  Caption="Счет"
+                                  Width="80px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(SvodPaymentOrder.Date)"
+                                  Caption="Дата"
+                                  SortOrder="DataGridColumnSortOrder.Ascending"
+                                  SortIndex="1"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(SvodPaymentOrder.Amount)"
+                                  Caption="Сумма платежей"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(SvodPaymentOrder.ComisBank)"
+                                  Caption="Комиссия банка"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(SvodPaymentOrder.ComisOur)"
+                                  Caption="Сумма ОСИ"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(SvodPaymentOrder.AmountToTransfer)"
+                                  Caption="К перечислению"
+                                  Width="50px">
+                </DxDataGridColumn>
+            </Columns>
+        </DxDataGrid>
+        <DxDataGrid @ref="summaryGrid" Data="@summaryRow"
+                    SelectionMode="DevExpress.Blazor.DataGridSelectionMode.None"
+                    CssClass="mw-1100">
+            <Columns>
+                <DxDataGridColumn Field="@nameof(SummaryRow.Fake1)" Caption="-" Width="50px" />
+                <DxDataGridColumn Field="@nameof(SummaryRow.Fake2)" Caption="-" Width="80px" />
+                <DxDataGridColumn Field="@nameof(SummaryRow.Fake3)" Caption="-" Width="50px" />
+                <DxDataGridColumn Field="@nameof(SummaryRow.Count)" Caption="Кол-во" Width="50px" />
+                <DxDataGridSpinEditColumn Field="@nameof(SummaryRow.Amount)" Caption="Сумма платежей" Width="50px" />
+                <DxDataGridSpinEditColumn Field="@nameof(SummaryRow.ComisBank)" Caption="Комиссия банка" Width="50px" />
+                <DxDataGridSpinEditColumn Field="@nameof(SummaryRow.ComisOur)" Caption="Сумма ОСИ" Width="50px" />
+                <DxDataGridSpinEditColumn Field="@nameof(SummaryRow.AmountToTransfer)" Caption="К перечислению" Width="50px" />
+            </Columns>
+        </DxDataGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    [Parameter]
+    public int OsiId { get; set; }
+
+    private Osi osi;
+    private DateTime date1;
+    private DateTime date2;
+    private IList<SvodPaymentOrder> paymentOrders;
+    private IList<SummaryRow> summaryRow;
+
+    private DxDataGrid<SvodPaymentOrder> grid;
+    private DxDataGrid<SummaryRow> summaryGrid;
+
+    private bool IsLoading = true;
+    private string osiName = "";
+    private string osiInfo = "";
+
+    public class SummaryRow
+    {
+        public string Fake1 { get; set; }
+        public string Fake2 { get; set; }
+        public string Fake3 { get; set; }
+        public int Count { get; set; }
+        public decimal Amount { get; set; }
+        public decimal ComisBank { get; set; }
+        public decimal ComisOur { get; set; }
+        public decimal AmountToTransfer { get; set; }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            DateTime today = DateTime.Today;
+            date1 = new DateTime(today.Year, today.Month, 1);
+            date2 = today;
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        osi = await osiSvc.GetOsiById(OsiId);
+        osiName = osi.Name;
+        osiInfo = $"{osi.Name}, id: {osi.Id}";
+        var apiResult = await paymentOrderSvc.GetSvodPaymentOrdersByOsiId(OsiId, date1, date2);
+        if (apiResult.Code == 0)
+        {
+            paymentOrders = apiResult.Result.ToList();
+            summaryRow = new List<SummaryRow>()
+            {
+                new SummaryRow
+                {
+                    Fake1 = "-",
+                    Fake2 = "-",
+                    Fake3 = "-",
+                    Count = paymentOrders.Count(),
+                    Amount = paymentOrders.Sum(o => o.Amount),
+                    ComisBank = paymentOrders.Sum(o => o.ComisBank),
+                    ComisOur = paymentOrders.Sum(o => o.ComisOur),
+                    AmountToTransfer = paymentOrders.Sum(o => o.AmountToTransfer),
+                }
+            };
+        }
+        else
+        {
+            ShowDebug(apiResult.Message, "Ошибка");
+        }
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    void ShowDebug(string message, string title = null, int width = 0, int height = 0)
+    {
+        dialogService.Open<Debug>(title == null ? "Сообщение" : title, new Dictionary<string, object>
+        {
+            ["data"] = message
+        }, new DialogOptions() { Width = width == 0 ? "950px" : width.ToString() + "px", Height = height == 0 ? "auto" : height.ToString() + "px" });
+    }
+
+    async Task DownloadExcel(int osiId)
+    {
+        var filename = await reportsSvc.SvodPaymentOrders(date1, date2, osiId);
+        using (FileStream fs = new FileStream(filename, FileMode.Open))
+        {
+            try
+            {
+                await BlazorDownloadFileService.DownloadFile(Path.GetFileName(filename), fs, bufferSize: 1 * 1024 * 1024 /* 1 Mb */, "application/octet-stream");
+            }
+            catch (Exception ex)
+            {
+                ShowDebug(ex.Message, "Ошибка");
+            }
+        }
+    }
+}

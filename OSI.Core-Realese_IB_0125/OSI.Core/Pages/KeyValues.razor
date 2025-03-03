@@ -1,0 +1,93 @@
+﻿@page "/key-values"
+
+@using Models.Db
+@using Blazorise
+@using Radzen
+@inject IKeyValueSvc keyValueSvc
+@inject Radzen.DialogService dialogService
+@attribute [Authorize]
+
+<PageTitle Value="Хранилище ключ-значение" />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>Хранилище ключ-значение</h3>
+        <Button Color="Color.Success" Clicked="@(e => ShowKeyValueData(null))" class="mb-2">Добавить</Button>
+        <RadzenGrid @ref="grid" AllowPaging="true" PageSize="20" AllowFiltering="true" AllowSorting="true"
+                    Data="@keyValues" TItem="KeyValue">
+            <Columns>
+                <RadzenGridColumn Title="Ключ" TItem="KeyValue" Property="Key" Width="100px" />
+                <RadzenGridColumn Title="Значение" TItem="KeyValue" Property="Value" Width="300px" />
+                <RadzenGridColumn Title="Действия" TItem="KeyValue" Bubble="false" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="100px">
+                    <Template Context="data">
+                        <Button Color="Color.Primary" Clicked="@(async e => await ShowKeyValueData(data))">Изменить</Button>
+                        <Button Color="Color.Danger" Clicked="@(async e => await RemoveKeyValue(data))">Удалить</Button>
+                    </Template>
+                </RadzenGridColumn>
+            </Columns>
+        </RadzenGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    private IList<KeyValue> keyValues;
+    private RadzenGrid<KeyValue> grid;
+    private bool IsLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    async Task ShowKeyValueData(KeyValue keyValue)
+    {
+        var index = keyValues.IndexOf(keyValue);
+        Dictionary<string, object> pars = new Dictionary<string, object>() { { "Key", keyValue?.Key } };
+        var result = await dialogService.OpenAsync<KeyValueData>(string.IsNullOrEmpty(keyValue?.Key) ? "Добавление" : "Изменение", pars, new DialogOptions()
+            {
+                Width = "700px",
+                Height = "310px",
+                Left = "calc(50% - 350px)",
+                Top = "calc(50% - 155px)"
+            });
+        if (result is KeyValue model)
+        {
+            if (index != -1)
+            {
+                keyValues[index] = model;
+            }
+            else
+            {
+                keyValues = keyValues.Append(model).OrderBy(kv => kv.Key).ToList();
+            }
+            await grid.Reload();
+            StateHasChanged();
+        }
+    }
+
+    async Task RemoveKeyValue(KeyValue keyValue)
+    {
+        if (keyValue is null) return;
+
+        await keyValueSvc.Remove(keyValue.Key);
+        keyValues.Remove(keyValue);
+        await grid.Reload();
+        StateHasChanged();
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        keyValues = (await keyValueSvc.GetModels()).OrderBy(kv => kv.Key).ToList();
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+}

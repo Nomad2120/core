@@ -1,0 +1,120 @@
+﻿@using Models.Db
+@using Radzen
+@inject Radzen.DialogService dialogService
+@inject IUserSvc userSvc
+
+<style>
+    form .row {
+        margin-bottom: 16px;
+    }
+</style>
+
+@if (user == null || isProcess)
+{
+    <p><em>Обработка...</em></p>
+}
+else
+{
+    <RadzenTemplateForm Data="user" Submit="@(async (User arg) => await Submit())">
+        <RadzenCard Style="padding: 20px;">
+            <DataAnnotationsValidator />
+            <DbExceptionValidator @ref="validator" />
+            <Microsoft.AspNetCore.Components.Forms.ValidationSummary Model="@user" />
+            <div class="row">
+                <div class="col-md-6">
+                    <RadzenLabel Text="Код пользователя" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@user.Code" />
+                    <ValidationMessage For="@(() => @user.Code)" />
+                </div>
+                <div class="col-md-6">
+                    <RadzenLabel Text="Телефон" />
+                    <RadzenMask Mask="**********" Pattern="[^\\d]" Placeholder="0000000000" @bind-Value=@user.Phone style="width: 100%" />
+                    <ValidationMessage For="@(() => @user.Phone)" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-3">
+                    <RadzenLabel Text="ИИН" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@user.IIN" MaxLength="12" />
+                    <ValidationMessage For="@(() => @user.IIN)" />
+                </div>
+                <div class="col-md-9">
+                    <RadzenLabel Text="ФИО пользователя" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@user.FIO" />
+                    <ValidationMessage For="@(() => @user.FIO)" />
+                </div>
+            </div>
+
+            <div class="row justify-content-end">
+                <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                    <RadzenButton ButtonType="Radzen.ButtonType.Submit" Icon="save" Text="Сохранить" />
+                    <RadzenButton ButtonStyle="ButtonStyle.Light" Icon="cancel" style="display: inline-block; margin-left: 10px;" Text="Отмена" Click="@Cancel" />
+                </div>
+            </div>
+        </RadzenCard>
+    </RadzenTemplateForm>
+    @*<h3>Роли пользователя</h3>
+    <Button Color="Color.Success" Clicked="@(e => AddRole())" class="mb-2">Добавить роль</Button>
+    <RadzenGrid @ref="rolesGrid" Data="@userRoles" TItem="UserRole">
+        <Columns>
+            <RadzenGridColumn Title="Код" TItem="UserRole" Property="Code" Width="50px" />
+            <RadzenGridColumn Title="Наименование" TItem="UserRole" Property="FIO" Width="100px" />
+            <RadzenGridColumn Title="Действия" TItem="UserRole" Bubble="false" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="100px">
+                <Template Context="data">
+                    <Button Color="Color.Link" Clicked="@(e => DeleteRole(data.Id))">Удалить роль</Button>
+                </Template>
+            </RadzenGridColumn>
+        </Columns>
+    </RadzenGrid>*@
+}
+
+@code {
+    [Parameter]
+    public int UserId { get; set; }
+
+    private bool isProcess = false;
+    private bool IsProcess
+    {
+        set
+        {
+            isProcess = value;
+            StateHasChanged();
+        }
+    }
+    private User user;
+    private DbExceptionValidator validator;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (UserId != default)
+        {
+            user = await userSvc.GetUserById(UserId);
+
+        }
+        else
+        {
+            user = new User();
+        }
+    }
+
+    async Task Submit()
+    {
+        try
+        {
+            IsProcess = true;
+            await userSvc.AddOrUpdateModel(user);
+            IsProcess = false;
+            dialogService.Close(user);
+        }
+        catch (Exception ex)
+        {
+            IsProcess = false;
+            validator.DisplayErrors(ex);
+        }
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+}

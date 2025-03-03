@@ -1,0 +1,386 @@
+﻿@page "/registrations"
+
+@using Models.Db
+@using Models.Enums
+@using Radzen
+@inject IRegistrationSvc registrationSvc
+@inject Radzen.DialogService dialogService
+@inject NotificationService NotificationService
+
+@attribute [Authorize]
+
+<PageTitle Value="Заявки" />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>Заявки на регистрацию ОСИ</h3>
+        @*<Button Color="Color.Success" Clicked="@(e => ShowRegistrationData(null))" class="mb-2">Добавить заявку</Button>*@
+        <DxDataGrid @ref="grid"
+                    Data="@registrations"
+                    SelectionMode="DevExpress.Blazor.DataGridSelectionMode.None"
+                    ShowFilterRow="true"
+                    HtmlDataCellDecoration="@OnHtmlDataCellDecoration"
+                    PageSize="100"
+                    CssClass="mw-1100">
+            @*<HeaderTemplate>
+                    <DxToolbar ItemRenderStyleMode="ToolbarRenderStyleMode.Plain">
+                        <Items>
+                            <DxToolbarItem Text="Изменить" Click="@OnEditClick" Enabled="@Enabled" />
+                            <DxToolbarItem Text="Удалить" Click="@OnDeleteClick" Enabled="@Enabled" />
+                            <DxToolbarItem Text="Фильтр" BeginGroup="true" GroupName="FilterRow" Click="@OnShowFilterRow" />
+                        </Items>
+                    </DxToolbar>
+                </HeaderTemplate>*@
+            <Columns>
+                <DxDataGridColumn Field="@nameof(Registration.Id)"
+                                  Caption="Id"
+                                  Width="60px">
+                    <DisplayTemplate>
+                        <a href="" @onclick="@(e => ShowRegistrationData((context as Registration).Id))" @onclick:preventDefault>@((context as Registration).Id)</a>
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+                <DxDataGridDateEditColumn Field="@nameof(Registration.CreateDt)"
+                                          DisplayFormat="dd.MM.yyyy HH:mm:ss"
+                                          Caption="Создана"
+                                          SortOrder="DataGridColumnSortOrder.Descending"
+                                          SortIndex="0"
+                                          Width="100px">
+                </DxDataGridDateEditColumn>
+                <DxDataGridColumn Field="@nameof(Registration.Name)"
+                                  Caption="Наименование ОСИ"
+                                  SortOrder="DataGridColumnSortOrder.Ascending"
+                                  SortIndex="1"
+                                  Width="150px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Registration.Idn)"
+                                  Caption="ИИН / БИН"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Registration.Phone)"
+                                  Caption="Телефон"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Registration.Address)"
+                                  Caption="Адрес"
+                                  Width="250px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Registration.RegistrationType)"
+                                  Caption="Тип"
+                                  Width="70px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Registration.RegistrationKindText)"
+                                  Caption="Тип"
+                                  Width="150px">
+                </DxDataGridColumn>
+                <DxDataGridComboBoxColumn Field="@nameof(Registration.StateCode)"
+                                          Caption="Состояние"
+                                          Width="100px"
+                                          Data="@registrationStates"
+                                          ValueFieldName="@nameof(RegistrationState.Code)"
+                                          TextFieldName="@nameof(RegistrationState.Name)"
+                                          FilteringMode="DataGridFilteringMode.StartsWith">
+                </DxDataGridComboBoxColumn>
+                <DxDataGridDateEditColumn Field="@nameof(Registration.SignDt)"
+                                          DisplayFormat="dd.MM.yyyy HH:mm:ss"
+                                          Caption="Подписана"
+                                          Width="100px">
+                </DxDataGridDateEditColumn>
+                <DxDataGridColumn Caption="Документы"
+                                  Width="100px"
+                                  AllowFilter="false"
+                                  AllowSort="false"
+                                  AllowGroup="false">
+                    <DisplayTemplate>
+                        <a href=@("/registration-docs/" + (context as Registration).Id) target="_blank">Документы</a>
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+                <DxDataGridColumn Caption="Действия"
+                                  Width="100px"
+                                  AllowFilter="false"
+                                  AllowSort="false"
+                                  AllowGroup="false">
+                    <DisplayTemplate>
+                        @{
+                            var data = context as Registration;
+                            @*временно, т.к. есть изменение состояния в дата-форме*@
+                            var haveActions = false;
+                            var canReject = data.StateCode is RegistrationStateCodes.CREATED or RegistrationStateCodes.SIGNED;
+                            haveActions |= canReject;
+                            var canConfirm = data.StateCode is RegistrationStateCodes.SIGNED;
+                            haveActions |= canConfirm;
+                            var canCreateOsi = data.StateCode is RegistrationStateCodes.CONFIRMED && data.RegistrationKind is "INITIAL";
+                            haveActions |= canCreateOsi;
+                            if (haveActions)
+                            {
+                                if (canReject)
+                                {
+                                    <a href="" @onclick="@(async (e) => await RejectRegistration(context as Registration))" @onclick:preventDefault>Отклонить</a>
+                                    <br/>
+                                }
+                                if (canConfirm)
+                                {
+                                    <a href="" @onclick="@(async (e) => await ConfirmRegistration(context as Registration))" @onclick:preventDefault>Подтвердить</a>
+                                    <br />
+                                }
+                                if (canCreateOsi)
+                                {
+                                    <a href="" @onclick="@(async (e) => await CreateOsi(context as Registration))" @onclick:preventDefault>Создать ОСИ</a>
+                                    <br />
+                                }
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        }
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+            </Columns>
+        </DxDataGrid>
+        @*<RadzenGrid @ref="grid" AllowPaging="true" PageSize="20" AllowFiltering="true" AllowSorting="true" Data="@registrations" TItem="Registration"
+                        ExpandMode="DataGridExpandMode.Single">
+                <Columns>
+                    <RadzenGridColumn Title="Создана" TItem="Registration" Property="CreateDt" Width="60px">
+                        <Template Context="data">
+                            @data.CreateDt.ToString("dd.MM.yyyy HH:mm:ss")
+                        </Template>
+                    </RadzenGridColumn>
+                    <RadzenGridColumn Title="Наименование ОСИ" TItem="Registration" Property="Name" Width="80px" />
+                    <RadzenGridColumn Title="ИИН / БИН" TItem="Registration" Property="Idn" Width="40px" />
+                    <RadzenGridColumn Title="Телефон" TItem="Registration" Property="Phone" Width="50px" />
+                    <RadzenGridColumn Title="Адрес" TItem="Registration" Property="Address" Width="100px" />
+                    <RadzenGridColumn Title="Email" TItem="Registration" Property="Email" Width="100px" />
+                    <RadzenGridColumn Title="Состояние" TItem="Registration" Width="40px">
+                        <Template Context="data">
+                            @switch (data.State)
+                            {
+                                case RegistrationStates.CREATED:
+                                    <span>Создана</span>
+                                    break;
+                                case RegistrationStates.SIGNED:
+                                    <span style="color: darkred">Подписана</span>
+                                    break;
+                                case RegistrationStates.CONFIRMED:
+                                    <span style="color: forestgreen">Подтверждена</span>
+                                    break;
+                                case RegistrationStates.REJECTED:
+                                    <span style="color: darkorchid">Отклонена</span>
+                                    break;
+                                case RegistrationStates.CLOSED:
+                                    <span>Закрыта</span>
+                                    break;
+                                default:
+                                    <span>data.State.ToString()</span>
+                                    break;
+                            }
+                        </Template>
+                    </RadzenGridColumn>
+                    <RadzenGridColumn Title="Действия" TItem="Registration" Bubble="false" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="100px">
+                        <Template Context="data">
+                            <Button Color="Color.Link" Clicked="@(e => ShowRegistrationData(data.Id))">Изменить</Button>
+                        </Template>
+                    </RadzenGridColumn>
+                </Columns>
+            </RadzenGrid>*@
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    private IList<Registration> registrations;
+    private DxDataGrid<Registration> grid;
+    private bool IsLoading = true;
+    //List<RegistrationStateTranslate> StateTranslates;
+    IEnumerable<RegistrationState> registrationStates;
+
+    protected override void OnInitialized()
+    {
+        dialogService.OnClose += CloseDialogEvent;
+    }
+
+    void CloseDialogEvent(dynamic result)
+    {
+        if (result != null)
+        {
+            if (result is Registration model)
+            {
+                var old = registrations.FirstOrDefault(u => u.Id == model.Id);
+                if (old != null)
+                {
+                    var index = registrations.IndexOf(old);
+                    registrations[index] = model;
+                }
+                else
+                {
+                    registrations.Add(model);
+                }
+                grid.Refresh().GetAwaiter();
+                StateHasChanged();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            //StateTranslates = registrationService.GetRegistrationStateTranslates;
+            registrationStates = await registrationSvc.GetRegistrationStates();
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    async Task RejectRegistration(Registration registration)
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        try
+        {
+            string rejectReason = Convert.ToString(await dialogService.OpenAsync<Prompt>("Введите причину отказа",
+                new() { ["Label"] = "Причина отказа" },
+                new DialogOptions() { Width = "950px", Height = "auto" }));
+            if (string.IsNullOrWhiteSpace(rejectReason))
+            {
+                IsLoading = false;
+                return;
+            }
+            await registrationSvc.RejectRegistration(registration, rejectReason);
+            var model = await registrationSvc.GetRegistrationById(registration.Id);
+            if (model != null)
+            {
+                var index = registrations.IndexOf(registration);
+                registrations[index] = model;
+            }
+            grid.Refresh().GetAwaiter();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            ShowDebug(ex.ToString(), "Ошибка");
+        }
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    async Task ConfirmRegistration(Registration registration)
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        try
+        {
+            await registrationSvc.ConfirmRegistration(registration);
+            var model = await registrationSvc.GetRegistrationById(registration.Id);
+            if (model != null)
+            {
+                var index = registrations.IndexOf(registration);
+                registrations[index] = model;
+            }
+            grid.Refresh().GetAwaiter();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            ShowDebug(ex.ToString(), "Ошибка");
+        }
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    async Task CreateOsi(Registration registration)
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        try
+        {
+            Osi osi = await registrationSvc.CreateOsiByRegistration(registration);
+            var model = await registrationSvc.GetRegistrationById(registration.Id);
+            if (model != null)
+            {
+                var index = registrations.IndexOf(registration);
+                registrations[index] = model;
+            }
+            grid.Refresh().GetAwaiter();
+            StateHasChanged();
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Detail = $"ОСИ успешно создан (Id={osi.Id})", Duration = 3000 });
+        }
+        catch (Exception ex)
+        {
+            ShowDebug(ex.ToString(), "Ошибка");
+        }
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    void ShowRegistrationData(int id)
+    {
+        Dictionary<string, object> pars = new Dictionary<string, object>() { { "RegistrationId", id } };
+        dialogService.Open<RegistrationData>((id == 0) ? "Добавление заявки" : "Изменение заявки", pars, new DialogOptions()
+        {
+            Width = "700px",
+            Height = "auto",
+            Left = "calc(50% - 350px)",
+            Top = "calc(50% - 300px)"
+        });
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        registrations = (await registrationSvc.GetRegistrations())/*.OrderByDescending(u => u.CreateDt)*/.ToList();
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    void ShowDebug(string message, string title = null, int width = 0, int height = 0)
+    {
+        dialogService.Open<Debug>(title == null ? "Сообщение" : title, new Dictionary<string, object>
+        {
+            ["data"] = message
+        }, new DialogOptions() { Width = width == 0 ? "950px" : width.ToString() + "px", Height = height == 0 ? "auto" : height.ToString() + "px" });
+    }
+
+    void OnHtmlDataCellDecoration(DataGridHtmlDataCellDecorationEventArgs<Registration> e)
+    {
+        if (e.FieldName == nameof(Registration.StateCode))
+        {
+            switch (e.DataItem.StateCode)
+            {
+                case RegistrationStateCodes.CREATED:
+                    e.Style += " color: rgb(115, 158, 170);";
+                    break;
+                case RegistrationStateCodes.SIGNED:
+                    e.Style += " color: rgb(115, 158, 2);";
+                    break;
+                case RegistrationStateCodes.CONFIRMED:
+                    e.Style += " color: rgb(15, 2, 170);";
+                    break;
+                case RegistrationStateCodes.REJECTED:
+                    e.Style += " color: rgb(11, 200, 170);";
+                    break;
+                case RegistrationStateCodes.CLOSED:
+                    e.Style += " color: rgb(200, 158, 170);";
+                    break;
+                default:
+                    break;
+            }
+        }
+        else if(e.FieldName == nameof(Registration.RegistrationType))
+        {
+            if (e.DataItem.RegistrationType == "FREE")
+            {
+                e.Style += " color: #38761D; font-weight: bold";
+            }
+            else
+            {
+                e.Style += " color:#990000;";
+            }
+        }
+    }
+}

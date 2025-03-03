@@ -1,0 +1,94 @@
+﻿@page "/tariffs"
+
+@using Models.Db
+@using Radzen
+@inject ITariffSvc tariffSvc
+@inject Radzen.DialogService dialogService
+@attribute [Authorize]
+
+<PageTitle Value="Тарифы" />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>Тарифы</h3>
+        <Button Color="Color.Success" Clicked="@(e => ShowTariffData())" class="mb-2">Добавить тариф</Button>
+        <RadzenGrid @ref="grid" AllowPaging="true" PageSize="20" AllowFiltering="true" AllowSorting="true"
+                    Data="@tariffs" TItem="Tariff">
+            <Columns>
+                <RadzenGridColumn Title="ID" TItem="Tariff" Property="Id" Width="30px" />
+                <RadzenGridColumn Title="ID региона" TItem="Tariff" Property="AtsId" Width="50px" />
+                <RadzenGridColumn Title="Название региона" TItem="Tariff" Property="AtsFullPath" Width="100px" />
+                <RadzenGridColumn Title="Дата" TItem="Tariff" Property="Date" Width="40px" />
+                <RadzenGridColumn Title="Тариф" TItem="Tariff" Property="Value" Width="50px" />
+            </Columns>
+        </RadzenGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    private IList<Tariff> tariffs;
+    private RadzenGrid<Tariff> grid;
+    private bool IsLoading = true;
+
+    protected override void OnInitialized()
+    {
+        dialogService.OnClose += CloseDialogEvent;
+    }
+
+    void CloseDialogEvent(dynamic result)
+    {
+        if (result != null)
+        {
+            if (result is Tariff model)
+            {
+                var old = tariffs.FirstOrDefault(t => t.Id == model.Id);
+                if (old != null)
+                {
+                    var index = tariffs.IndexOf(old);
+                    tariffs[index] = model;
+                }
+                else
+                {
+                    tariffs.Add(model);
+                }
+                grid.Reload();
+                StateHasChanged();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    void ShowTariffData()
+    {
+        dialogService.Open<TariffData>("Добавление тарифа", options: new DialogOptions()
+        {
+            Width = "700px",
+            Height = "350px",
+            Left = "calc(50% - 350px)",
+            Top = "calc(50% - 175px)"
+        });
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        tariffs = (await tariffSvc.GetModelsByQuery(q => q.OrderByDescending(t => t.Date))).ToList();
+        IsLoading = false;
+        StateHasChanged();
+    }
+}

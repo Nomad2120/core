@@ -1,0 +1,139 @@
+﻿@page "/plan-accurals-common"
+
+@using Models.Db
+@using Models.Responses
+@using Radzen
+@inject IOsiSvc osiSvc
+@inject IPlanAccuralSvc planSvc
+@inject ITransactionSvc tranSvc
+@inject Radzen.DialogService dialogService
+@attribute [Authorize]
+
+<PageTitle Value="Планы начислений"/>
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>@("Планы начислений")</h3>
+        <DxDataGrid @ref="grid"
+                    Data="@planAccuralsResponse"
+                    SelectionMode="DevExpress.Blazor.DataGridSelectionMode.None"
+                    ShowFilterRow="true"
+                    PageSize="300"
+                    CssClass="mw-1100">
+            <Columns>
+                <DxDataGridColumn Field="@nameof(PlanAccuralsOsiResponse.Osi.Id)"
+                                  Caption="Id"
+                                  Width="50px">
+                    <DisplayTemplate>
+                        <a href="" @onclick="@(e => ShowOsiDataForm((context as PlanAccuralsOsiResponse).Osi.Id))" @onclick:preventDefault>@((context as PlanAccuralsOsiResponse).Osi.Id)</a>
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(PlanAccuralsOsiResponse.Osi.Name)"
+                                  Caption="Name"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Caption="Дата 1"                                  
+                                  Width="100px">
+                    <DisplayTemplate>
+                        @if ((context as PlanAccuralsOsiResponse).PlanAccurals.ElementAtOrDefault(0) != null)
+                        {
+                            <a href=@("/plan-accural/" + (context as PlanAccuralsOsiResponse).PlanAccurals.ElementAtOrDefault(0).Id) target="_blank">
+                                @((context as PlanAccuralsOsiResponse).PlanAccurals?.ElementAtOrDefault(0)?.BeginDate.ToString("dd.MM.yyyy"))
+                            </a>
+                        }
+                    </DisplayTemplate>
+                </DxDataGridColumn>                
+            </Columns>
+        </DxDataGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    [Parameter]
+    public int OsiId { get; set; }
+
+    private IList<PlanAccuralsOsiResponse> planAccuralsResponse;
+
+    private DxDataGrid<PlanAccuralsOsiResponse> grid;
+    private bool IsLoading = true;
+
+    protected override void OnInitialized()
+    {
+        //dialogService.OnClose += CloseDialogEvent;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        DateTime ed = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1);
+        DateTime sd = ed.AddMonths(-3);
+        planAccuralsResponse = (await planSvc.GetAllPlanAccuralsOnPeriod(sd, ed)).ToList();
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+
+    void ShowDataForm(int id)
+    {
+        Dictionary<string, object> pars = new Dictionary<string, object>() { { "PlanAccuralId", id } };
+        dialogService.Open<PlanAccuralData>((id == 0) ? "Добавление данных" : "Изменение данных", pars, new DialogOptions()
+        {
+            Width = "700px",
+            Height = "auto",
+            Left = "calc(50% - 350px)",
+            Top = "calc(50% - 300px)"
+        });
+    }
+
+    void ShowOsiDataForm(int id)
+    {
+        Dictionary<string, object> pars = new Dictionary<string, object>() { { "OsiId", id } };
+        dialogService.Open<OsiData>((id == 0) ? "Добавление данных" : "Изменение данных", pars, new DialogOptions()
+        {
+            Width = "700px",
+            Height = "auto",
+            Left = "calc(50% - 350px)",
+            Top = "calc(50% - 300px)"
+        });
+    }
+
+    private async Task CreateAccurals(int planAccuralId)
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        try
+        {
+            await tranSvc.CreateAccuralsByPlanId(planAccuralId);
+        }
+        catch (Exception ex)
+        {
+            ShowDebug(ex.Message, "Ошибка");
+        }
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    void ShowDebug(string message, string title = null, int width = 0, int height = 0)
+    {
+        dialogService.Open<Debug>(title == null ? "Сообщение" : title, new Dictionary<string, object>
+        {
+            ["data"] = message
+        }, new DialogOptions() { Width = width == 0 ? "950px" : width.ToString() + "px", Height = height == 0 ? "auto" : height.ToString() + "px" });
+    }
+}

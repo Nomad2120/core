@@ -1,0 +1,168 @@
+﻿@page "/osv/{OsiId:int}"
+
+@using Models.Db
+@using Models.Enums
+@using Models.Reports
+@using Radzen
+@using System.IO
+@inject IOsiSvc osiSvc
+@inject ITransactionSvc transactionSvc
+@inject IReportsSvc reportsSvc
+@inject Radzen.DialogService dialogService
+@inject IBlazorDownloadFileService BlazorDownloadFileService
+@attribute [Authorize]
+
+<PageTitle Value=@("ОСВ " + osiName) />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>@("Оборотно-сальдовая ведомость по " + osiName)</h3>
+        <Button Class="mb-2" Style="display:inline" Color="Color.Success" Clicked="@(e => DownloadCSV(OsiId, DebtFileTypeCodes.CSV_ANSI))">Скачать CSV (ANSI)</Button>
+        <Button Class="mb-2" Color="Color.Success" Clicked="@(e => DownloadCSV(OsiId, DebtFileTypeCodes.CSV_UTF8))">Скачать CSV (UTF-8)</Button>
+        <DxDataGrid @ref="grid"
+                    Data="@osvList"
+                    SelectionMode="DevExpress.Blazor.DataGridSelectionMode.None"
+                    ShowFilterRow="true"
+                    PageSize="300"
+                    CssClass="mw-1100">
+            <Columns>
+                <DxDataGridColumn Field="@nameof(OsvAbonentView.AbonentId)"
+                                  Caption="Id абонента"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsvAbonentView.AbonentName)"
+                                  Caption="Абонент"
+                                  Width="150px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsvAbonentView.Flat)"
+                                  Caption="Квартира"
+                                  SortOrder="DataGridColumnSortOrder.Ascending"
+                                  SortIndex="1"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsvAbonentView.ServiceName)"
+                                  Caption="Услуга"
+                                  Width="200px">
+                </DxDataGridColumn>
+                <DxDataGridSpinEditColumn Field="@nameof(OsvAbonentView.Begin)" Width="120px" />
+                <DxDataGridSpinEditColumn Field="@nameof(OsvAbonentView.Debet)" Width="120px" />
+                <DxDataGridSpinEditColumn Field="@nameof(OsvAbonentView.Kredit)" Width="120px" />
+                <DxDataGridSpinEditColumn Field="@nameof(OsvAbonentView.End)" Width="120px" />
+            </Columns>
+        </DxDataGrid>
+        <DxDataGrid @ref="summaryGrid" Data="@osvSummaryRow"
+                    SelectionMode="DevExpress.Blazor.DataGridSelectionMode.None"
+                    CssClass="mw-1100">
+            <Columns>
+                <DxDataGridColumn Field="@nameof(OSVSummaryRow.Count)" Width="50px" />
+                <DxDataGridSpinEditColumn Field="@nameof(OSVSummaryRow.Begin)" Width="120px" />
+                <DxDataGridSpinEditColumn Field="@nameof(OSVSummaryRow.Debet)" Width="120px" />
+                <DxDataGridSpinEditColumn Field="@nameof(OSVSummaryRow.Kredit)" Width="120px" />
+                <DxDataGridSpinEditColumn Field="@nameof(OSVSummaryRow.End)" Width="120px" />
+            </Columns>
+        </DxDataGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    [Parameter]
+    public int OsiId { get; set; }
+
+    private IList<OsvAbonentView> osvList;
+
+    private IList<OSVSummaryRow> osvSummaryRow;
+
+    public class OsvAbonentView
+    {
+        public int AbonentId { get; set; }
+        public string AbonentName { get; set; }
+        public string Flat { get; set; }
+        public string ServiceName { get; set; }
+        public decimal Begin { get; set; }
+        public decimal Debet { get; set; }
+        public decimal Kredit { get; set; }
+        public decimal End { get; set; }
+    }
+
+    private DxDataGrid<OsvAbonentView> grid;
+    private DxDataGrid<OSVSummaryRow> summaryGrid;
+    private bool IsLoading = true;
+    private string osiName = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        osiName = (await osiSvc.GetOsiById(OsiId))?.Name;
+        DateTime today = DateTime.Today;
+        DateTime dateBegin = new DateTime(today.Year, today.Month, 1);
+        DateTime dateEnd = dateBegin.AddMonths(1);
+        var osv = await transactionSvc.GetOSVOnDateByOsiId(dateBegin, dateEnd, OsiId);
+        osvList = osv.Abonents.SelectMany(a => a.ServicesSaldo.Select(ss => new OsvAbonentView
+        {
+            AbonentId = a.AbonentId,
+            AbonentName = a.AbonentName,
+            Flat = a.Flat.PadLeft(4, '0'),
+            ServiceName = ss.Key,
+            Begin = ss.Value.Begin,
+            Debet = ss.Value.Debet,
+            Kredit = ss.Value.Kredit,
+            End = ss.Value.End
+        })).ToList();
+        osvSummaryRow = new List<OSVSummaryRow>()
+        { 
+            new OSVSummaryRow
+            {
+                Count = osvList.Count(),
+                Begin = osvList.Sum(o => o.Begin),
+                Debet = osvList.Sum(o => o.Debet),
+                Kredit = osvList.Sum(o => o.Kredit),
+                End = osvList.Sum(o => o.End),
+            }
+        };
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    void ShowDebug(string message, string title = null, int width = 0, int height = 0)
+    {
+        dialogService.Open<Debug>(title == null ? "Сообщение" : title, new Dictionary<string, object>
+        {
+            ["data"] = message
+        }, new DialogOptions() { Width = width == 0 ? "950px" : width.ToString() + "px", Height = height == 0 ? "auto" : height.ToString() + "px" });
+    }
+
+    async Task DownloadCSV(int osiId, DebtFileTypeCodes debtFileType)
+    {
+        DateTime today = DateTime.Today;
+        DateTime dateBegin = new DateTime(today.Year, today.Month, 1);
+        DateTime dateEnd = dateBegin.AddMonths(1);
+        var filename = await reportsSvc.GetDebtFile(dateBegin, dateEnd, osiId, debtFileType);
+        using (FileStream fs = new FileStream(filename, FileMode.Open))
+        {
+            try
+            {
+                await BlazorDownloadFileService.DownloadFile(Path.GetFileName(filename), fs, bufferSize: 1 * 1024 * 1024 /* 1 Mb */, "application/octet-stream");
+            }
+            catch (Exception ex)
+            {
+                ShowDebug(ex.Message, "Ошибка");
+            }
+        }
+    }
+}

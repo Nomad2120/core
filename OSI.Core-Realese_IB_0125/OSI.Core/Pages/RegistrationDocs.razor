@@ -1,0 +1,207 @@
+﻿@page "/registration-docs/{RegistrationId:int}"
+
+@using Models.Db
+@using Models.Responses
+@using Radzen
+@inject IRegistrationSvc registrationSvc
+@inject IScanSvc scanSvc
+@inject Radzen.DialogService dialogService
+@inject NotificationService NotificationService
+@inject IBlazorDownloadFileService BlazorDownloadFileService
+@attribute [Authorize]
+
+<PageTitle Value="Сканированные документы" />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>Сканированные документы</h3>
+        @*<Button Color="Color.Success" Clicked="@(e => ShowScanData(null))" class="mb-2">Добавить документ</Button>*@
+        <RadzenGrid @ref="grid" AllowPaging="true" PageSize="10"
+                    Data="@docs" TItem="RegistrationDocExtended" AllowColumnResize="true">
+            <Columns>
+                <RadzenGridColumn TItem="RegistrationDocExtended" Property="@nameof(RegistrationDocExtended.Id)" Title="ID" Width="100px" />
+                <RadzenGridColumn TItem="RegistrationDocExtended" Title="Документ">
+                    <Template Context="data">
+                        @data.DocType.NameRu
+                        @if (!string.IsNullOrEmpty(data.ImageSource))
+                        {
+                            <br />
+                            <img src=@data.ImageSource alt=@("<Документ: " + data.DocType.NameRu + ">") Style="max-width:150px; max-height:150px" />
+                        }
+                    </Template>
+                </RadzenGridColumn>
+                <RadzenGridColumn TItem="RegistrationDocExtended" Title="Служебная информация" Width="350px">
+                    <Template Context="data">
+                        @($"Код: {data.DocTypeCode}, ScanId: {data.ScanId}")
+                    </Template>
+                </RadzenGridColumn>
+                <RadzenGridColumn Title="Действия" TItem="RegistrationDocExtended" TextAlign="TextAlign.Center" Width="250px">
+                    <Template Context="data">
+                        @*<Button Color="Color.Link" Clicked="@(async (e) => await DownloadFile(data))">Скачать</Button>*@
+                        @*<Button Color="Color.Link" Clicked="@(e => DeleteRegistrationDoc(data.Id))">Удалить</Button>*@
+                        <a href="" @onclick="@(async (e) => await DownloadFile(data))" @onclick:preventDefault>Скачать</a>
+                        &nbsp;|&nbsp;
+                        <a href="" @onclick="@(async (e) => await DeleteRegistrationDoc(data.Id))" @onclick:preventDefault>Удалить</a>
+                        @if (data.IsDownloading)
+                        {
+                            <RadzenProgressBar Value="data.DownloadProgress" />
+                        }
+                    </Template>
+                </RadzenGridColumn>
+            </Columns>
+        </RadzenGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    public class RegistrationDocExtended : RegistrationDoc
+    {
+
+        public string Base64Data { get; set; }
+        public string ImageSource { get; set; }
+        public bool IsDownloading { get; set; }
+        public double DownloadProgress { get; set; } = 0.0;
+    }
+
+    [Parameter]
+    public int RegistrationId { get; set; }
+
+    private IList<RegistrationDocExtended> docs;
+    private RadzenGrid<RegistrationDocExtended> grid;
+    private bool IsLoading = true;
+
+    protected override void OnInitialized()
+    {
+        dialogService.OnClose += CloseDialogEvent;
+    }
+
+    void CloseDialogEvent(dynamic result)
+    {
+        if (result != null)
+        {
+            if (result is RegistrationDocExtended model)
+            {
+                var old = docs.FirstOrDefault(u => u.Id == model.Id);
+                if (old != null)
+                {
+                    var index = docs.IndexOf(old);
+                    docs[index] = model;
+                }
+                else
+                {
+                    docs.Add(model);
+                }
+                grid.Reload();
+                StateHasChanged();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        //docs = (IList<RegistrationDocExtended>)((await registrationService.GetRegistrationDocs(RegistrationId)).ToList());
+        var regdocs = await registrationSvc.GetRegistrationDocs(RegistrationId);
+        docs = regdocs.Select(doc => new RegistrationDocExtended
+            {
+                DocType = doc.DocType,
+                DocTypeCode = doc.DocTypeCode,
+                Scan = doc.Scan,
+                ScanId = doc.ScanId,
+                Id = doc.Id,
+                Registration = doc.Registration,
+                RegistrationId = doc.RegistrationId
+            }).ToList();
+
+        foreach (var doc in docs)
+        {
+            var (base64, mimeType) = await scanSvc.GetScanData(doc.Scan);
+            doc.Base64Data = base64;
+            doc.ImageSource = !string.IsNullOrEmpty(mimeType) ? $"data:{mimeType};base64,{base64}" : null;
+        }
+
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    async Task DeleteRegistrationDoc(int id)
+    {
+        if (await dialogService.Confirm("Хотите удалить документ?", "Внимание", new ConfirmOptions() { OkButtonText = "Да", CancelButtonText = "Нет" }) == true)
+        {
+            try
+            {
+                await registrationSvc.DeleteRegistrationDoc(RegistrationId, id);
+                var old = docs.FirstOrDefault(u => u.Id == id);
+                if (old != null)
+                {
+                    var index = docs.IndexOf(old);
+                    docs.RemoveAt(index);
+                }
+                await grid.Reload();
+                StateHasChanged();
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Detail = "Документ удален", Duration = 3000 });
+            }
+            catch (Exception ex)
+            {
+                ShowDebug(ex.Message, "Ошибка");
+            }
+        }
+    }
+
+    void ShowDebug(string message, string title = null, int width = 0, int height = 0)
+    {
+        dialogService.Open<Debug>(title == null ? "Сообщение" : title, new Dictionary<string, object>
+            {
+                ["data"] = message
+            }, new DialogOptions() { Width = width == 0 ? "950px" : width.ToString() + "px", Height = height == 0 ? "auto" : height.ToString() + "px" });
+    }
+
+    void ShowScanData(int? id)
+    {
+        Dictionary<string, object> pars = new Dictionary<string, object>() { { "ScanId", id } };
+        dialogService.Open<RegistrationDocData>((id == null || id == 0) ? "Добавление документа" : "Изменение документа", pars, new DialogOptions()
+            {
+                Width = "700px",
+                Height = "auto",
+                Left = "calc(50% - 350px)",
+                Top = "calc(50% - 220px)"
+            });
+    }
+
+    async Task DownloadFile(RegistrationDocExtended doc)
+    {
+        if (!string.IsNullOrEmpty(doc.Base64Data))
+        {
+            doc.IsDownloading = true;
+            await BlazorDownloadFileService.DownloadFile(doc.Scan.FileName, doc.Base64Data, bufferSize: 1 * 1024 * 1024 /* 1 Mb */, "application/octet-stream",
+                progress =>
+                {
+                    doc.DownloadProgress = Math.Round(progress * 100);
+                    StateHasChanged();
+                    return Task.CompletedTask;
+                });
+
+            doc.IsDownloading = false;
+        }
+        else
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Detail = "Файл не найден", Duration = 3000 });
+        }
+    }
+}

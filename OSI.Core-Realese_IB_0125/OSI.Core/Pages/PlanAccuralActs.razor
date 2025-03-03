@@ -1,0 +1,172 @@
+﻿@page "/plan-accural-acts/{PlanAccuralId:int}"
+
+@using Models.Db
+@using Models.Responses
+@using Radzen
+@inject IOsiSvc osiSvc
+@inject IPlanAccuralSvc planSvc
+@inject ITransactionSvc transactionSvc
+@inject Radzen.DialogService dialogService
+@inject IActSvc actSvc
+@attribute [Authorize]
+
+<PageTitle Value=@("Акты плана начислений " + titleString) />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>@("Акты плана начислений " + titleString)</h3>
+        <DxDataGrid @ref="grid"
+                    Data="@acts"
+                    SelectionMode="DevExpress.Blazor.DataGridSelectionMode.None"
+                    ShowFilterRow="true"
+                    PageSize="300"
+                    CssClass="mw-1100">
+            <Columns>
+                <DxDataGridColumn Field="@nameof(Act.Id)"
+                                  Caption="Id"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Act.CreateDt)"
+                                  Caption="Создан"
+                                  SortOrder="DataGridColumnSortOrder.Ascending"
+                                  SortIndex="1"
+                                  Width="80px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Act.ActNum)"
+                                  Caption="Номер акта"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Act.ActPeriod)"
+                                  Caption="Период акта"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Act.StateCode)"
+                                  Caption="Состояние"
+                                  Width="80px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Act.Amount)"
+                                  Caption="Сумма"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Act.Debt)"
+                                  Caption="Задолженность"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Caption=""
+                                  Width="50px"
+                                  AllowFilter="false"
+                                  AllowSort="false"
+                                  AllowGroup="false">
+                    <DisplayTemplate>
+                        @if (string.IsNullOrEmpty((context as Act).EsfNum))
+                        {
+                            <a href="" @onclick="@(e => CreateEsf((context as Act).Id))" @onclick:preventDefault>Создать ЭСФ</a>
+                        }
+                        else
+                        {
+                            <p style="margin:0">@((context as Act).EsfNum)</p>
+                        }
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(Act.EsfError)"
+                                  Caption="Ошибка"
+                                  Width="50px">
+                </DxDataGridColumn>
+            </Columns>
+        </DxDataGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    [Parameter]
+    public int PlanAccuralId { get; set; }
+
+    private IList<Act> acts;
+    private DxDataGrid<Act> grid;
+    private PlanAccural planAccural;
+    private bool IsLoading = true;
+    private string titleString = "";
+
+    protected override void OnInitialized()
+    {
+        dialogService.OnClose += CloseDialogEvent;
+    }
+
+    void CloseDialogEvent(dynamic result)
+    {
+        if (result != null)
+        {
+            if (result is Act model)
+            {
+                var old = acts.FirstOrDefault(u => u.Id == model.Id);
+                if (old != null)
+                {
+                    var index = acts.IndexOf(old);
+                    acts[index] = model;
+                }
+                else
+                {
+                    acts.Add(model);
+                }
+                grid.Refresh().GetAwaiter();
+                StateHasChanged();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        planAccural = await planSvc.GetPlanAccuralById(PlanAccuralId);
+        string osiName = (await osiSvc.GetOsiById(planAccural.OsiId))?.Name;
+        titleString = osiName + " за " + planAccural.BeginDate.ToString("dd.MM.yyyy");
+        acts = (await planSvc.GetActsByPlanId(PlanAccuralId)).ToList();
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    void ShowDebug(string message, string title = null, int width = 0, int height = 0)
+    {
+        dialogService.Open<Debug>(title == null ? "Сообщение" : title, new Dictionary<string, object>
+        {
+            ["data"] = message
+        }, new DialogOptions() { Width = width == 0 ? "950px" : width.ToString() + "px", Height = height == 0 ? "auto" : height.ToString() + "px" });
+    }
+
+    private async Task CreateEsf(int actId)
+    {
+        IsLoading = true;
+        var act = await actSvc.GetActById(actId);
+        var apiResponse = await actSvc.CreateEsf(act);
+        IsLoading = false;
+        if (apiResponse.Code != 0)
+        {
+            act.EsfNum = "";
+            act.EsfError = apiResponse.Result.ErrorMessage;
+            ShowDebug(apiResponse.Message, "Ошибка");
+        }
+        else
+        {
+            act.EsfNum = apiResponse.Result.Id;
+            act.EsfError = "";
+            ShowDebug("Счет-фактура создана");
+        }
+        StateHasChanged();
+    }
+}

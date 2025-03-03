@@ -1,0 +1,139 @@
+﻿@page "/osi-services/{OsiId:int}"
+
+@using Models.Db
+@using Models.Enums
+@using Radzen
+@inject IOsiSvc osiSvc
+@inject IOsiServiceSvc osiServiceSvc
+@inject Radzen.DialogService dialogService
+@attribute [Authorize]
+
+<PageTitle Value=@("Услуги " + osiName) />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>@("Услуги " + osiName)</h3>
+        <DxDataGrid @ref="grid"
+                    Data="@osiServices"
+                    SelectionMode="DevExpress.Blazor.DataGridSelectionMode.None"
+                    ShowFilterRow="true"
+                    CssClass="mw-1100">
+            <Columns>
+                <DxDataGridColumn Field="@nameof(OsiService.Id)"
+                                  Caption="OsiServiceId"
+                                  Width="60px">
+                    @*<DisplayTemplate>
+                <a href="" @onclick="@(e => ShowRegistrationData((context as Registration).Id))" @onclick:preventDefault>@((context as Registration).Id)</a>
+            </DisplayTemplate>*@
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiService.ServiceGroupId)"
+                                  Caption="Номер группы"
+                                  SortOrder="DataGridColumnSortOrder.Ascending"
+                                  SortIndex="1"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiService.ServiceGroupNameRu)"
+                                  Caption="Группа"
+                                  Width="150px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiService.NameRu)"
+                                  Caption="Наименование"
+                                  SortOrder="DataGridColumnSortOrder.Ascending"
+                                  SortIndex="2"
+                                  Width="150px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(OsiService.ServiceGroupNameRu)"
+                                  Caption="Описание"
+                                  Width="150px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Caption=""
+                                  Width="100px"
+                                  AllowFilter="false"
+                                  AllowSort="false"
+                                  AllowGroup="false">
+                    <DisplayTemplate>
+                        <Dropdown>
+                            <DropdownToggle Color="Color.Primary" Size="Size.ExtraSmall">
+                                Ссылки
+                            </DropdownToggle>
+                            <DropdownMenu>
+                                <DropdownItem><a href=@("/load-begin-saldo/" + (context as OsiService).Id) target="_blank">Загрузка нач.сальдо</a></DropdownItem>
+                            </DropdownMenu>
+                        </Dropdown>
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+            </Columns>
+        </DxDataGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    [Parameter]
+    public int OsiId { get; set; }
+
+    private IList<OsiService> osiServices;
+
+    private DxDataGrid<OsiService> grid;
+    private bool IsLoading = true;
+    private string osiName = "";
+
+    protected override void OnInitialized()
+    {
+        dialogService.OnClose += CloseDialogEvent;
+    }
+
+    void CloseDialogEvent(dynamic result)
+    {
+        if (result != null)
+        {
+            if (result is OsiService model)
+            {
+                var old = osiServices.FirstOrDefault(u => u.Id == model.Id);
+                if (old != null)
+                {
+                    var index = osiServices.IndexOf(old);
+                    osiServices[index] = model;
+                }
+                else
+                {
+                    osiServices.Add(model);
+                }
+                grid.Refresh().GetAwaiter();
+                StateHasChanged();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        osiName = (await osiSvc.GetOsiById(OsiId))?.Name;
+        osiServices = (await osiServiceSvc.GetOsiServicesByOsiId(OsiId)).ToList();
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    void ShowDebug(string message, string title = null, int width = 0, int height = 0)
+    {
+        dialogService.Open<Debug>(title == null ? "Сообщение" : title, new Dictionary<string, object>
+        {
+            ["data"] = message
+        }, new DialogOptions() { Width = width == 0 ? "950px" : width.ToString() + "px", Height = height == 0 ? "auto" : height.ToString() + "px" });
+    }
+}

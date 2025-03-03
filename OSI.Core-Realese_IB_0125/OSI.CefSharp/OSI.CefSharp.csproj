@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0-windows</TargetFramework>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <SelfContained Condition="'$(SelfContained)' == ''">false</SelfContained>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="GPUCache\**" />
+    <Content Remove="GPUCache\**" />
+    <EmbeddedResource Remove="GPUCache\**" />
+    <None Remove="GPUCache\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <_WebToolingArtifacts Remove="Properties\PublishProfiles\ProdIISProfile.pubxml" />
+    <_WebToolingArtifacts Remove="Properties\PublishProfiles\TestIISProfile.pubxml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="5.6.3" />
+    <PackageReference Include="CefSharp.OffScreen.NETCore" Version="101.0.180" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OSI.Core.Types\OSI.Core.Types.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,127 @@
+﻿@inherits LayoutComponentBase
+
+@using System.Security.Claims;
+@using Radzen
+@inject OSI.Core.Services.IAuthSvc authSvc
+@inject Radzen.DialogService dialogService
+
+<RadzenDialog />
+<RadzenNotification />
+
+<style>
+    #top-container {
+        display: flex;
+        justify-content: space-between;
+        /*background-color: lightyellow;*/
+    }
+
+    /*#top-container > div {
+            height: 100px;
+            border: 2px dashed red
+        }*/
+</style>
+
+<div class="page">
+    @*<div class="sidebar">
+            <NavMenu />
+        </div>*@
+    <div class="main">
+        <AuthorizeView>
+            <Authorized>
+                <div id="top-container">
+                    <div>
+                        <RadzenMenu Style="position: fixed; z-index:1000">
+                            <AuthorizeView Roles="ADMIN" Context="innerContext">
+                                <RadzenMenuItem Text="Справочники" Icon="dashboard">
+                                    <RadzenMenuItem Text="Пользователи" Icon="account_box" Path="users"></RadzenMenuItem>
+                                    <RadzenMenuItem Text="Роли" Icon="android" Path="roles"></RadzenMenuItem>
+                                    <RadzenMenuItem Text="Тарифы" Icon="money" Path="tariffs"></RadzenMenuItem>
+                                    <RadzenMenuItem Text="Хранилище ключ-значение" Icon="view_list" Path="key-values"></RadzenMenuItem>
+                                </RadzenMenuItem>
+                            </AuthorizeView>
+                            <RadzenMenuItem Text="Заявки">
+                                <RadzenMenuItem Text="Заявки на регистрацию ОСИ" Path="registrations"></RadzenMenuItem>
+                                <RadzenMenuItem Text="Заявки на добавление/изменение счетов" Path="osi-account-applications"></RadzenMenuItem>
+                            </RadzenMenuItem>
+                            <RadzenMenuItem Text="ОСИ" Path="osi"></RadzenMenuItem>
+                            @*<RadzenMenuItem Text="Планы начислений" Path="plan-accurals-common"></RadzenMenuItem>*@
+                            <RadzenMenuItem Text="Контакты Telegram" Path="telegram-chats"></RadzenMenuItem>
+                            <RadzenMenuItem Text="API" Path="swagger"></RadzenMenuItem>
+                        </RadzenMenu>
+                    </div>
+                    <div></div>
+                    <div>
+                        <RadzenMenu Click="@(async e => { if (e.Text == "Logout") await authSvc.Logout(); })">
+                            <RadzenMenuItem Text="@context.User.Identity.Name" Icon="face">
+                                <ChildContent>
+                                    <a href="" class="btn btn-sm btn-success"
+                                       @onclick="@(e => ShowChangePassword(context.User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.UserData).Value))" @onclick:preventDefault>Сменить пароль</a>
+                                </ChildContent>
+                            </RadzenMenuItem>
+                            <RadzenMenuItem Text="Logout"></RadzenMenuItem>
+                        </RadzenMenu>
+                    </div>
+                </div>
+            </Authorized>
+            <NotAuthorized>
+                <br />
+                <br />
+                <div class="row">
+                    <div class="col-md-2"></div>
+                    <div class="col-md-8">
+                        <RadzenCard>
+                            <RadzenLogin AllowRegister="false" AllowResetPassword="false"
+                                         LoginText="Вход" UserText="Пользователь" PasswordText="Пароль"
+                                         UserRequired="Укажите имя пользователя"
+                                         PasswordRequired="Укажите пароль"
+                                         Login=@(async args => await OnLogin(args))
+                                         Style="margin-bottom: 20px;" />
+                            @if (isError)
+                            {
+                                <p class="text-danger">@textError</p>
+                            }
+                        </RadzenCard>
+                    </div>
+                    <div class="col-md-2"></div>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
+        <div class="content px-4">
+            @Body
+        </div>
+    </div>
+</div>
+
+@code
+{
+    private bool isError = false;
+    private string textError = "";
+
+    async Task OnLogin(LoginArgs args)
+    {
+        try
+        {
+            await authSvc.Login(args.Username, args.Password);
+            isError = false;
+        }
+        catch (Exception ex)
+        {
+            isError = true;
+            textError = ex.Message;
+        }
+    }
+
+    void ShowChangePassword(string userData)
+    {
+        if (!string.IsNullOrEmpty(userData) && int.TryParse(userData, out int userId))
+        {
+            Dictionary<string, object> pars = new Dictionary<string, object>() { { "UserId", userId } };
+            dialogService.Open<ChangePassword>("Изменение пароля", pars, new DialogOptions()
+            {
+                Width = "450px",
+                Height = "auto"
+            });
+        }
+
+    }
+}

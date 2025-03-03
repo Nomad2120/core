@@ -1,0 +1,43 @@
+﻿@using Radzen
+@inject Radzen.DialogService dialogService
+
+<RadzenTemplateForm Data="data" Submit="@((PromptData arg) => Submit())">
+    <div Style="padding: 20px;">
+        <div class="row">
+            <RadzenLabel Text="@Label" />
+            <RadzenTextBox style="width: 100%" @bind-Value="@data.Value" Placeholder="@Placeholder" />
+        </div>
+        <div class="row justify-content-end">
+            <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                <RadzenButton ButtonType="Radzen.ButtonType.Submit" Icon="done" Text="OK"/>
+                <RadzenButton ButtonStyle="ButtonStyle.Light" Icon="cancel" style="display: inline-block; margin-left: 10px;" Text="Отмена" Click="@Cancel" />
+            </div>
+        </div>
+    </div>
+</RadzenTemplateForm>
+
+@code {
+    private class PromptData
+    {
+        public string Value { get; set; }
+    }
+
+    [Parameter]
+    public string Placeholder { get; set; }
+
+    [Parameter]
+    public string Label { get; set; }
+
+    private PromptData data = new();
+
+    void Submit()
+    {
+        dialogService.Close(data.Value);
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+
+}

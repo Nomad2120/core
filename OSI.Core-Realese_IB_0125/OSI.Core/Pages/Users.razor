@@ -1,0 +1,106 @@
+﻿@page "/users"
+
+@using Models.Db
+@using Radzen
+@inject IUserSvc userSvc
+@inject Radzen.DialogService dialogService
+@attribute [Authorize]
+
+<PageTitle Value="Пользователи" />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>Пользователи</h3>
+        <Button Color="Color.Success" Clicked="@(e => ShowUserData(null))" class="mb-2">Добавить пользователя</Button>
+        <RadzenGrid @ref="grid" AllowPaging="true" PageSize="20" AllowFiltering="true" AllowSorting="true"
+                    Data="@users" TItem="User">
+            <Columns>
+                <RadzenGridColumn Title="ID" TItem="User" Property="Id" Width="30px">
+                    <Template Context="data">
+                        <a href="" @onclick="@(e => ShowUserData(data.Id))" @onclick:preventDefault>@data.Id</a>
+                    </Template>
+                </RadzenGridColumn>
+                <RadzenGridColumn Title="Код" TItem="User" Property="Code" Width="50px" />
+                <RadzenGridColumn Title="ФИО" TItem="User" Property="FIO" Width="100px" />
+                <RadzenGridColumn Title="ИИН" TItem="User" Property="IIN" Width="40px" />
+                <RadzenGridColumn Title="Телефон" TItem="User" Property="Phone" Width="50px" />
+                <RadzenGridColumn Title="Email" TItem="User" Property="Email" Width="100px" />
+                @*<RadzenGridColumn Title="Действия" TItem="User" Bubble="false" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="100px">
+                    <Template Context="data">
+                        <Button Color="Color.Link" Clicked="@(e => ShowUserData(data.Id))">Изменить</Button>
+                    </Template>
+                </RadzenGridColumn>*@
+            </Columns>
+        </RadzenGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    private IList<User> users;
+    private RadzenGrid<User> grid;
+    private bool IsLoading = true;
+
+    protected override void OnInitialized()
+    {
+        dialogService.OnClose += CloseDialogEvent;
+    }
+
+    void CloseDialogEvent(dynamic result)
+    {
+        if (result != null)
+        {
+            if (result is User model)
+            {
+                var old = users.FirstOrDefault(u => u.Id == model.Id);
+                if (old != null)
+                {
+                    var index = users.IndexOf(old);
+                    users[index] = model;
+                }
+                else
+                {
+                    users.Add(model);
+                }
+                grid.Reload();
+                StateHasChanged();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    void ShowUserData(int? id)
+    {
+        Dictionary<string, object> pars = new Dictionary<string, object>() { { "UserId", id } };
+        dialogService.Open<UserData>((id == null || id == 0) ? "Добавление пользователя" : "Изменение пользователя", pars, new DialogOptions()
+        {
+            Width = "700px",
+            Height = "615px",
+            Left = "calc(50% - 350px)",
+            Top = "calc(50% - 300px)"
+        });
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        users = (await userSvc.GetUsers()).OrderBy(u => u.Code).ToList();
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+}

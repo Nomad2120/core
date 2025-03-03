@@ -1,0 +1,278 @@
+﻿@page "/osi-abonents/{OsiId:int}"
+
+@using Models.Db
+@using Models.Responses
+@using Radzen
+@using Microsoft.EntityFrameworkCore
+
+@inject IOsiSvc osiSvc
+@inject IAbonentSvc abonentSvc
+@inject ITransactionSvc transactionSvc
+@inject Radzen.DialogService dialogService
+@inject NotificationService NotificationService
+
+@attribute [Authorize]
+
+<PageTitle Value=@("Абоненты " + osiName) />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>@("Абоненты " + osiName)</h3>
+        <DxDataGrid @ref="grid"
+                    Data="@abonents"
+                    SelectionMode="DevExpress.Blazor.DataGridSelectionMode.None"
+                    ShowFilterRow="true"
+                    PageSize="300"
+                    CssClass="mw-1100">
+            <Columns>
+                <DxDataGridColumn Field="@nameof(Abonent.Id)"
+                                  Caption="Id"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(AbonentView.Name)"
+                                  Caption="ФИО"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(AbonentView.Area)"
+                                  Caption="Тип помещения"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(AbonentView.Square)"
+                                  Caption="Площадь"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(AbonentView.Flat)"
+                                  Caption="Кв"
+                                  Width="50px"
+                                  SortOrder="DataGridColumnSortOrder.Ascending"
+                                  SortIndex="1">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(AbonentView.Floor)"
+                                  Caption="Этаж"
+                                  Width="50px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(AbonentView.Idn)"
+                                  Caption="ИИН/БИН"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Field="@nameof(AbonentView.Phone)"
+                                  Caption="Телефон"
+                                  Width="100px">
+                </DxDataGridColumn>
+                <DxDataGridColumn Caption=""
+                                  Width="100px"
+                                  AllowFilter="false"
+                                  AllowSort="false"
+                                  AllowGroup="false">
+                    <DisplayTemplate>
+                        <a href="" @onclick="@(e => DeleteAbonent(context as AbonentView))" @onclick:preventDefault>Удалить</a>
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+                <DxDataGridCheckBoxColumn Field="@nameof(Osi.IsActive)"
+                                          Caption="Активен"
+                                          Width="50px">
+                </DxDataGridCheckBoxColumn>
+                <DxDataGridColumn Caption=""
+                                  Width="100px"
+                                  AllowFilter="false"
+                                  AllowSort="false"
+                                  AllowGroup="false">
+                    <DisplayTemplate>
+                        @if ((context as AbonentView).IsActive)
+                        {
+                            <a href="" @onclick="@(e => SetStatusForAbonent((context as AbonentView), false))" @onclick:preventDefault>Деактивировать</a>
+                        }
+                        else
+                        {
+                            <a href="" @onclick="@(e => SetStatusForAbonent((context as AbonentView), true))" @onclick:preventDefault>Активировать</a>
+                        }
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+                <DxDataGridColumn Caption=""
+                                  Width="100px"
+                                  AllowFilter="false"
+                                  AllowSort="false"
+                                  AllowGroup="false">
+                    <DisplayTemplate>
+                        <Dropdown>
+                            <DropdownToggle Color="Color.Primary" Size="Size.ExtraSmall">
+                                Ссылки
+                            </DropdownToggle>
+                            <DropdownMenu>
+                                <DropdownItem>
+                                    <a href="" @onclick="@(async (e) => await SaldoOnDate((context as AbonentView).Id))" @onclick:preventDefault>Текущее сальдо</a>
+                                </DropdownItem>
+                                <DropdownItem>
+                                    <a href=@("/abonent-transactions/" + (context as AbonentView).Id) target="_blank">Операции по абоненту</a>
+                                </DropdownItem>
+                            </DropdownMenu>
+                        </Dropdown>
+                    </DisplayTemplate>
+                </DxDataGridColumn>
+            </Columns>
+        </DxDataGrid>
+        <div class="row mb-2">
+            <div class="col-md-2">
+                <RadzenLabel Style="font-size: 24px; font-weight: bold" Text=@($"Итого: {TotalCount.ToString()}") />
+            </div>
+        </div>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    [Parameter]
+    public int OsiId { get; set; }
+
+    private IList<AbonentView> abonents;
+
+    public class AbonentView
+    {
+        public int Id { get; set; }
+        public string Area { get; set; }
+        public string Name { get; set; }
+        public string Idn { get; set; }
+        public string Phone { get; set; }
+        public string Flat { get; set; }
+        public int Floor { get; set; }
+        public decimal Square { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    private DxDataGrid<AbonentView> grid;
+    private bool IsLoading = true;
+    private string osiName = "";
+    private int TotalCount = 0;
+
+    async Task SaldoOnDate(int abonentId)
+    {
+        var endSaldo = await transactionSvc.GetEndSaldoOnDateByAbonentId(DateTime.Now, abonentId);
+        if (endSaldo?.Services.Any() ?? false)
+        {
+            string saldo = "";
+            foreach (EndSaldoService es in endSaldo.Services)
+            {
+                saldo += es.ServiceName + ": " + es.Debt.ToString("#,##0.00") + Environment.NewLine;
+            }
+            ShowDebug(saldo);
+        }
+        else
+        {
+            ShowDebug("Нет данных");
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        osiName = (await osiSvc.GetOsiById(OsiId))?.Name;
+        var abonentsOsi = (await osiSvc.GetAbonentsByOsiId(OsiId, false, true)).ToList();
+        abonents = abonentsOsi.Select(a => new AbonentView
+            {
+                Id = a.Id,
+                Area = a.AreaTypeNameRu,
+                Flat = a.Flat.PadLeft(4, '0'),
+                Floor = a.Floor,
+                Idn = a.Idn,
+                Name = a.Name,
+                Phone = a.Phone,
+                Square = a.Square,
+                IsActive = a.IsActive
+            }).ToList();
+        TotalCount = abonents.Count;
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    void ShowDebug(string message, string title = null, int width = 0, int height = 0)
+    {
+        dialogService.Open<Debug>(title == null ? "Сообщение" : title, new Dictionary<string, object>
+            {
+                ["data"] = message
+            }, new DialogOptions() { Width = width == 0 ? "950px" : width.ToString() + "px", Height = height == 0 ? "auto" : height.ToString() + "px" });
+    }
+
+    public async Task DeleteAbonent(AbonentView ab)
+    {
+        var answer = await dialogService.Confirm("Удалить абонента?", "Внимание", new ConfirmOptions
+            {
+                OkButtonText = "Да",
+                CancelButtonText = "Нет"
+            });
+
+        if (!(answer ?? false))
+        {
+            return;
+        }
+
+        try
+        {
+            using var db = OSIBillingDbContext.DbContext;
+
+            var abonent = await db.Abonents.FirstOrDefaultAsync(a => a.Id == ab.Id) ?? throw new Exception("Абонент не найден");
+
+            if (await db.Transactions.AnyAsync(t => t.AbonentId == ab.Id && t.TransactionType != Models.Enums.TransactionTypeCodes.SALDO))
+                throw new Exception("По данному абоненту есть транзакции");
+
+            var saldos = await db.ServiceGroupSaldos.Where(a => a.AbonentId == ab.Id).ToListAsync();
+            db.ServiceGroupSaldos.RemoveRange(saldos);
+
+            var transactions = await db.Transactions.Where(a => a.AbonentId == ab.Id).ToListAsync();
+            db.Transactions.RemoveRange(transactions);
+
+            db.Abonents.Remove(abonent);
+            await db.SaveChangesAsync();
+
+            abonents.Remove(ab);
+            grid.Refresh().GetAwaiter();
+            StateHasChanged();
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Detail = $"Абонент успешно удален", Duration = 3000 });
+        }
+        catch (Exception ex)
+        {
+            ShowDebug(ex.Message);
+        }
+    }
+
+    public async Task SetStatusForAbonent(AbonentView ab, bool status)
+    {
+        var answer = await dialogService.Confirm(status == true ? "Активизировать абонента?" : "Деактивизировать абонента?", "Внимание", new ConfirmOptions
+            {
+                OkButtonText = "Да",
+                CancelButtonText = "Нет"
+            });
+
+        if (!(answer ?? false))
+        {
+            return;
+        }
+
+        try
+        {
+            await abonentSvc.SetStatusForAbonent(ab.Id, status);
+            ab.IsActive = status;
+            grid.Refresh().GetAwaiter();
+            StateHasChanged();
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Detail = $"Абонент " + (status ? "активизирован" : "деактивизирован"), Duration = 3000 });
+        }
+        catch (Exception ex)
+        {
+            ShowDebug(ex.Message);
+        }
+    }
+}

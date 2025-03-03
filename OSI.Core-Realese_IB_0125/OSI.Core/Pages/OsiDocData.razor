@@ -1,0 +1,131 @@
+﻿@using Models.Db
+@using System.IO
+@using OSI.Core.Models.Enums
+@using OSI.Core.Models.Requests
+@using Radzen
+@inject Radzen.DialogService dialogService
+@inject IScanSvc scanSvc
+@inject ICatalogSvc catalogSvc
+
+<style>
+    form .row {
+        margin-bottom: 16px;
+    }
+</style>
+
+@if (isProcess)
+{
+    <p><em>Обработка...</em></p>
+}
+else
+{
+    <RadzenTemplateForm Data="modelStub" TItem="AddScanDoc" Submit="Submit">
+        <RadzenCard Style="padding: 20px;">
+            <DbExceptionValidator @ref="validator" />
+            <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+            <div class="row">
+                <RadzenLabel Text="Тип документа" />
+                <RadzenDropDown Data="docTypes" TextProperty="@nameof(DocType.NameRu)" style="width: 100%" @bind-Value="@docType" />
+            </div>
+            <BlazorInputFile.InputFile id="uploadFiles" OnChange="HandleSelection" />
+            <div class="row">
+                @if (file != null)
+                {
+                    <div class="col-md-6">
+                        <div>
+                            <h4>@file.Name</h4>
+                            Размер: <strong>@file.Size байт</strong><br />
+                            Тип: <strong>@file.Type</strong><br />
+                        </div>
+                        @if (!isFileLoading)
+                        {
+                            <p>Загружен.</p>
+                        }
+                        else
+                        {
+                            <p>Загружается @((100.0 * file.Data.Position / file.Size).ToString("0"))%</p>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        @if (!isFileLoading && fileData.Length <= 2 * 1024* 1024)
+                        {
+                            <RadzenImage Path=@($"data:image/jpg;base64,{Convert.ToBase64String(fileData)}") Style="max-width:200px; max-height:200px" />
+                        }
+                    </div>
+                }
+            </div>
+            <div class="row justify-content-end">
+                <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                    <RadzenButton ButtonType="Radzen.ButtonType.Submit" Icon="save" Text="Сохранить" />
+                    <RadzenButton ButtonStyle="ButtonStyle.Light" Icon="cancel" style="display: inline-block; margin-left: 10px;" Text="Отмена" Click="@Cancel" />
+                </div>
+            </div>
+        </RadzenCard>
+    </RadzenTemplateForm>
+}
+
+@code {
+    AddScanDoc modelStub = new();
+    IEnumerable<DocType> docTypes;
+    DocType docType;
+    private DbExceptionValidator validator;
+    IFileListEntry file;
+    byte[] fileData = new byte[0];
+    bool isFileLoading;
+
+    private bool isProcess = false;
+    private bool IsProcess
+    {
+        set
+        {
+            isProcess = value;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        docTypes = await catalogSvc.GetDocTypes();
+        IsProcess = false;
+    }
+
+    async Task HandleSelection(IFileListEntry[] files)
+    {
+        file = files.FirstOrDefault();
+        if (file != null)
+        {
+            isFileLoading = true;
+            file.OnDataRead += (sender, eventArgs) => InvokeAsync(StateHasChanged);
+            var ms = new MemoryStream();
+            await file.Data.CopyToAsync(ms);
+            fileData = ms.ToArray();
+            isFileLoading = false;
+        }
+    }
+
+    void Submit()
+    {
+        try
+        {
+            IsProcess = true;
+            var addScanDoc = new AddScanDoc
+                {
+                    DocTypeCode = docType.Code,
+                    Data = fileData,
+                    Extension = Path.GetExtension(file.Name),
+                };
+            IsProcess = false;
+            dialogService.Close(addScanDoc);
+        }
+        catch (Exception ex)
+        {
+            IsProcess = false;
+            validator.DisplayErrors(ex);
+        }
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+}

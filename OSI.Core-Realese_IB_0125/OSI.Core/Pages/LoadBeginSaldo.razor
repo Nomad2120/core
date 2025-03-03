@@ -1,0 +1,153 @@
+﻿@page "/load-begin-saldo/{OsiServiceId:int}"
+
+@using System.IO
+@using Models.Db
+@using Radzen
+@using Microsoft.AspNetCore.Hosting
+@inject IOsiSvc osiSvc
+@inject IOsiServiceSvc osiServiceSvc
+@inject IServiceGroupSaldoSvc serviceGroupSaldoSvc
+@inject Radzen.DialogService dialogService
+@inject IWebHostEnvironment env
+@inject NotificationService NotificationService
+@attribute [Authorize]
+
+<PageTitle Value="Загрузка начального сальдо" />
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h2>@($"Загрузка начального сальдо для ({osiName}) по услуге ({osiService?.NameRu})")</h2>
+        <p>
+            Формат файла:
+            <pre>
+            квартира 	долг на начало
+            1	15128,4
+            2	-0,2
+            3	2030,6
+            4	3903,2
+            5	-232
+            6	12075,2
+            7	5940
+            8	8968,8
+            </pre>
+        </p>
+        <p>
+            <label>
+                Загрузите файл с начальным сальдо:
+                <Microsoft.AspNetCore.Components.Forms.InputFile OnChange="@LoadFile" />
+            </label>
+        </p>
+        <p>
+            <DxCheckBox @bind-Checked="@replaceSaldo">Заменить сальдо</DxCheckBox>
+        </p>
+        @if (file != null)
+        {
+            <div class="row">
+                <div class="col-md-6">
+                    <div>
+                        <h4>@file.Name</h4>
+                        Размер: <strong>@file.Size байт</strong><br />
+                    </div>
+                    @if (!isFileLoading)
+                    {
+                        <p>Загружен.</p>
+                        <Button Color="Color.Success" Clicked="@(e => ProcessLoadSaldo(file.Name))">Выполнить</Button>
+                        <SpinLoader IsLoading="IsLoadingSaldo" Spinner="SpinnerType.Chase">
+                            <LoadingTemplate>
+                                <div class="col-sm-12" style="vertical-align: middle">
+                                    <br /><br />
+                                    <Chase Center="true" />
+                                </div>
+                            </LoadingTemplate>
+                        </SpinLoader>
+                    }
+                    else
+                    {
+                        <p>Загружается...</p>
+                    }
+                </div>
+            </div>
+        }
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    [Parameter]
+    public int OsiServiceId { get; set; }
+
+    private bool IsLoading = true;
+    private bool IsLoadingSaldo = false;
+    private string osiName = "";
+    OsiService osiService;
+    IBrowserFile file;
+    bool isFileLoading;
+    bool replaceSaldo = false;
+
+    private async Task LoadFile(InputFileChangeEventArgs e)
+    {
+        isFileLoading = true;
+        file = e.File;
+        try
+        {
+            string randomFileName = Path.GetRandomFileName();
+            string path = Path.Combine(env.WebRootPath, "load_saldo_files", e.File.Name);
+            await using FileStream fs = new(path, FileMode.Create);
+            await file.OpenReadStream(1024000).CopyToAsync(fs);
+        }
+        catch (Exception ex)
+        {
+            ShowDebug(ex.Message, "Ошибка");
+        }
+        isFileLoading = false;
+    }
+
+    async Task ProcessLoadSaldo(string filename)
+    {
+        IsLoadingSaldo = true;
+        await Task.Delay(100);
+        try
+        {
+            //await serviceGroupSaldoSvc.LoadBeginSaldoFromFile((osiService, replaceSaldo, filename);
+        }
+        catch (Exception ex)
+        {
+            ShowDebug(ex.Message, "Ошибка");
+        }
+        IsLoadingSaldo = false;
+        StateHasChanged();
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Detail = "Сальдо загружено", Duration = 3000 });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        osiService = await osiServiceSvc.GetOsiServiceById(OsiServiceId);
+        osiName = (await osiSvc.GetOsiById(osiService.OsiId))?.Name;
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    void ShowDebug(string message, string title = null, int width = 0, int height = 0)
+    {
+        dialogService.Open<Debug>(title == null ? "Сообщение" : title, new Dictionary<string, object>
+        {
+            ["data"] = message
+        }, new DialogOptions() { Width = width == 0 ? "950px" : width.ToString() + "px", Height = height == 0 ? "auto" : height.ToString() + "px" });
+    }
+}

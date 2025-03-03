@@ -1,0 +1,105 @@
+﻿@using Models.Db
+@using OSI.Core.Models.AddressRegistry
+@using Radzen
+@inject Radzen.DialogService dialogService
+@inject ITariffSvc tariffSvc
+@inject IAddressRegistrySvc addressRegistrySvc
+
+<style>
+    form .row {
+        margin-bottom: 16px;
+    }
+</style>
+
+@if (tariff == null || isProcess)
+{
+    <p><em>Обработка...</em></p>
+}
+else
+{
+    <RadzenTemplateForm Data="tariff" Submit="@(async (Tariff arg) => await Submit())">
+        <RadzenCard Style="padding: 20px;">
+            <DataAnnotationsValidator />
+            <DbExceptionValidator @ref="validator" />
+            <Microsoft.AspNetCore.Components.Forms.ValidationSummary Model="@tariff" />
+            <div class="row">
+                <div class="col-md-12">
+                    <RadzenLabel Text="Регион" />
+                    <RadzenDropDown AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Style="width: 100%"
+                                Data="@regions" TValue="Region" TextProperty="FullPathRus" @bind-Value="@region" />
+                    <ValidationMessage For="@(() => tariff.AtsId)" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <RadzenLabel Text="Тариф" />
+                    <RadzenNumeric TValue="decimal" Format="0.00" @bind-Value=@tariff.Value Style="margin-left: 5px;" />
+                    <ValidationMessage For="@(() => tariff.Value)" />
+                </div>
+                <div class="col-md-6">
+                    <RadzenLabel Text="Дата" />
+                    <RadzenDatePicker DateFormat="d" @bind-Value="@tariff.Date" Style="margin-left: 5px;" />
+                    <ValidationMessage For="@(() => tariff.Date)" />
+                </div>
+            </div>
+
+            <div class="row justify-content-end">
+                <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                    <RadzenButton ButtonType="Radzen.ButtonType.Submit" Icon="save" Text="Сохранить" />
+                    <RadzenButton ButtonStyle="ButtonStyle.Light" Icon="cancel" style="display: inline-block; margin-left: 10px;" Text="Отмена" Click="@Cancel" />
+                </div>
+            </div>
+        </RadzenCard>
+    </RadzenTemplateForm>
+}
+
+@code {
+    [Parameter]
+    public int TariffId { get; set; }
+
+    private bool isProcess = false;
+    private bool IsProcess
+    {
+        set
+        {
+            isProcess = value;
+            StateHasChanged();
+        }
+    }
+    private Tariff tariff;
+    private Region region;
+    private IEnumerable<Region> regions;
+    private DbExceptionValidator validator;
+
+    protected override async Task OnInitializedAsync()
+    {
+        regions = await addressRegistrySvc.GetRegions();
+        tariff = new Tariff()
+            {
+                Date = DateTime.Today.AddDays(1)
+            };
+    }
+
+    async Task Submit()
+    {
+        try
+        {
+            IsProcess = true;
+            tariff.AtsId = region.AtsId;
+            tariff.AtsFullPath = region.FullPathRus;
+            await tariffSvc.AddOrUpdateModel(tariff);
+            IsProcess = false;
+            dialogService.Close(tariff);
+        }
+        catch (Exception ex)
+        {
+            IsProcess = false;
+            validator.DisplayErrors(ex);
+        }
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+}

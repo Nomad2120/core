@@ -1,0 +1,95 @@
+﻿@using Models.Db
+@using Radzen
+@inject Radzen.DialogService dialogService
+@inject IKeyValueSvc keyValueSvc
+
+<style>
+    form .row {
+        margin-bottom: 16px;
+    }
+</style>
+
+@if (keyValue == null || isProcess)
+{
+    <p><em>Обработка...</em></p>
+}
+else
+{
+    <RadzenTemplateForm Data="keyValue" Submit="@(async (KeyValue arg) => await Submit())">
+        <RadzenCard Style="padding: 20px;">
+            <DataAnnotationsValidator />
+            <DbExceptionValidator @ref="validator" />
+            <Microsoft.AspNetCore.Components.Forms.ValidationSummary Model="@keyValue" />
+            <div class="row">
+                <div class="col-md-4">
+                    <RadzenLabel Text="Ключ" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@keyValue.Key" ReadOnly="isEdit" />
+                    <ValidationMessage For="@(() => keyValue.Key)" />
+                </div>
+                <div class="col-md-8">
+                    <RadzenLabel Text="Значение" />
+                    <RadzenTextBox style="width: 100%" @bind-Value="@keyValue.Value" />
+                    <ValidationMessage For="@(() => keyValue.Value)" />
+                </div>
+            </div>
+            <div class="row justify-content-end">
+                <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                    <RadzenButton ButtonType="Radzen.ButtonType.Submit" Icon="save" Text="Сохранить" />
+                    <RadzenButton ButtonStyle="ButtonStyle.Light" Icon="cancel" style="display: inline-block; margin-left: 10px;" Text="Отмена" Click="@Cancel" />
+                </div>
+            </div>
+        </RadzenCard>
+    </RadzenTemplateForm>
+}
+
+@code {
+    [Parameter]
+    public string Key { get; set; }
+
+    private bool isEdit = false;
+    private bool isProcess = false;
+    private bool IsProcess
+    {
+        set
+        {
+            isProcess = value;
+            StateHasChanged();
+        }
+    }
+    private KeyValue keyValue;
+    private DbExceptionValidator validator;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(Key))
+        {
+            keyValue = await keyValueSvc.GetModelByFunc(kv => kv.Key == Key);
+            isEdit = true;
+        }
+        else
+        {
+            keyValue = new KeyValue();
+        }
+    }
+
+    async Task Submit()
+    {
+        try
+        {
+            IsProcess = true;
+            await keyValueSvc.AddOrUpdate(keyValue.Key, keyValue.Value);
+            IsProcess = false;
+            dialogService.Close(keyValue);
+        }
+        catch (Exception ex)
+        {
+            IsProcess = false;
+            validator.DisplayErrors(ex);
+        }
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+}

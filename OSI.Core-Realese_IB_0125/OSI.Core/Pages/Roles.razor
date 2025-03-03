@@ -1,0 +1,98 @@
+﻿@page "/roles"
+
+@using Models.Db
+@using Radzen
+@inject IModelService<OSIBillingDbContext, Role> roleService
+@inject Radzen.DialogService dialogService
+@attribute [Authorize]
+
+<SpinLoader IsLoading="IsLoading" Spinner="SpinnerType.Chase">
+    <LoadingTemplate>
+        <div class="col-sm-12" style="vertical-align: middle">
+            <br /><br />
+            <Chase Center="true" />
+        </div>
+    </LoadingTemplate>
+    <ContentTemplate>
+        <h3>Роли</h3>
+        <Button Color="Color.Success" Clicked="@(e => ShowRoleData(null))" class="mb-2">Добавить роль</Button>
+        <RadzenGrid @ref="grid" AllowPaging="true" PageSize="20" AllowFiltering="true" AllowSorting="true"
+                    Data="@roles" TItem="Role">
+            <Columns>
+                <RadzenGridColumn Title="Код" TItem="Role" Property="Code" Width="100px" />
+                <RadzenGridColumn Title="Наименование" TItem="Role" Property="Name" Width="300px" />
+                <RadzenGridColumn Title="Действия" TItem="Role" Bubble="false" Filterable="false" Sortable="false" TextAlign="TextAlign.Center" Width="100px">
+                    <Template Context="data">
+                        <Button Color="Color.Link" Clicked="@(e => ShowRoleData(data.Id))">Изменить</Button>
+                    </Template>
+                </RadzenGridColumn>
+            </Columns>
+        </RadzenGrid>
+    </ContentTemplate>
+</SpinLoader>
+
+@code {
+    private IList<Role> roles;
+    private Role role;
+    private DbExceptionValidator validator;
+    private RadzenGrid<Role> grid;
+    private bool IsLoading = true;
+
+    protected override void OnInitialized()
+    {
+        dialogService.OnClose += CloseDialogEvent;
+    }
+
+    void CloseDialogEvent(dynamic result)
+    {
+        if (result != null)
+        {
+            if (result is Role model)
+            {
+                var old = roles.FirstOrDefault(u => u.Id == model.Id);
+                if (old != null)
+                {
+                    var index = roles.IndexOf(old);
+                    roles[index] = model;
+                }
+                else
+                {
+                    roles.Add(model);
+                }
+                grid.Reload();
+                StateHasChanged();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    void ShowRoleData(int? id)
+    {
+        Dictionary<string, object> pars = new Dictionary<string, object>() { { "RoleId", id } };
+        dialogService.Open<RoleData>((id == null || id != 0) ? "Добавление роли" : "Изменение роли", pars, new DialogOptions()
+        {
+            Width = "700px",
+            Height = "310px",
+            Left = "calc(50% - 350px)",
+            Top = "calc(50% - 155px)"
+        });
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        await Task.Delay(100);
+        roles = (await roleService.GetModels()).OrderBy(u => u.Code).ToList();
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+}

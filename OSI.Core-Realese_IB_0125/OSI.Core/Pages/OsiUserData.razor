@@ -1,0 +1,75 @@
+﻿@using Models.Db
+@using Models.Requests
+@using Models.Enums
+@using Radzen
+@inject Radzen.DialogService dialogService
+@inject IOsiSvc osiSvc
+@inject NotificationService NotificationService
+
+<style>
+    form .row {
+        margin-bottom: 16px;
+    }
+</style>
+
+@if (users == null || isProcess)
+{
+    <p><em>Обработка...</em></p>
+}
+else
+{
+    <RadzenCard Style="padding: 20px;">
+        <div class="row">
+            <div class="col-md-6">
+                <RadzenLabel Text="Id" />
+                <RadzenTextBox style="width: 100%" Value="@user.Id.ToString()" ReadOnly="true" />
+            </div>
+            <div class="col-md-6">
+                <RadzenLabel Text="Телефон" />
+                <RadzenTextBox style="width: 100%" Value="@user.Phone" ReadOnly="true" />
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <RadzenLabel Text="ФИО" />
+                <RadzenTextBox style="width: 100%" Value="@user.FIO" ReadOnly="true" />
+            </div>
+        </div>
+        <div class="row justify-content-end">
+            <div class="col-md-12 d-flex align-items-end justify-content-end" style="margin-top: 16px;">
+                <Button Color="Color.Secondary" Clicked="@Cancel">Закрыть</Button>
+            </div>
+        </div>
+    </RadzenCard>
+}
+
+@code {
+    [Parameter]
+    public int OsiId { get; set; }
+
+    private bool isProcess = false;
+    private bool IsProcess
+    {
+        set
+        {
+            isProcess = value;
+            StateHasChanged();
+        }
+    }
+    private IEnumerable<User> users;
+    private User user => users.FirstOrDefault();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (OsiId != default)
+        {
+            users = await osiSvc.GetOsiUsers(OsiId);
+        }
+        else throw new Exception("Не передан параметр OsiId");
+    }
+
+    void Cancel()
+    {
+        dialogService.Close(null);
+    }
+}
