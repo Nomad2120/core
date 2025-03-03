@@ -1,49 +1,31 @@
-name: Build and SonarCloud Analysis
-
+name: Build
 on:
   push:
     branches:
       - main
   pull_request:
     types: [opened, synchronize, reopened]
-
 jobs:
   build:
-    name: Build and analyze
+    name: Build
     runs-on: ubuntu-latest
-
+    env:
+      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Отключаем "shallow clone" для лучшего анализа SonarCloud
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '7.0.x'  # Или замените на '6.0.x', '8.0.x' в зависимости от версии вашего проекта
-
-      - name: Restore dependencies
-        run: dotnet restore
-
-      - name: Build solution
-        run: dotnet build --no-restore --configuration Release
-
-      - name: Run tests with coverage
-        run: dotnet test --no-build --configuration Release --collect:"XPlat Code Coverage"
-
-      - name: Prepare SonarCloud Analysis
+          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Install Build Wrapper
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v4
+      - name: Run Build Wrapper
         run: |
-          mkdir -p coverage
-          cp $(find . -name "coverage.cobertura.xml") coverage/
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
+          mkdir build
+          cmake -S . -B build
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build build/ --config Release
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v4
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }} # Put the name of your token here
         with:
           args: >
-            -Dsonar.projectKey=Nomad2120_core
-            -Dsonar.organization=nomad2120
-            -Dsonar.host.url=https://sonarcloud.io
-            -Dsonar.cs.opencover.reportsPaths=coverage/coverage.cobertura.xml
+            --define sonar.cfamily.compile-commands="${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json"
